@@ -1,4 +1,3 @@
-use std::string::String;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, LiteralValue};
 
@@ -168,4 +167,85 @@ impl Parser {
     pub fn parse(&mut self) -> Expr {
         return self.expression();
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+
+    #[test]
+    fn test_binary_addition() {
+        let mut lexer = Lexer::new("1 + 2".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        assert!(matches!(expr, Expr::Binary { .. }));
+    }
+
+    #[test]
+    fn test_unary() {
+        let mut lexer = Lexer::new("-5".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        assert!(matches!(expr, Expr::Unary { .. }));
+    }
+
+    #[test]
+    fn test_grouping() {
+        let mut lexer = Lexer::new("(1 + 2)".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        assert!(matches!(expr, Expr::Grouping { .. }));
+    }
+
+    #[test]
+    fn test_literal_number() {
+        let mut lexer = Lexer::new("7".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        assert!(matches!(expr, Expr::Literal { .. }));
+    }
+
+    #[test]
+    fn test_comparison() {
+        let mut lexer = Lexer::new("1 > 2".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        assert!(matches!(expr, Expr::Binary { .. }));
+    }
+
+    #[test]
+    fn test_literal_bool() {
+        let mut lexer = Lexer::new("true".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        assert!(matches!(expr, Expr::Literal { .. }));
+    }
+
+    #[test]
+     fn test_literal_str() {
+        let mut lexer = Lexer::new("\"hello\"".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        assert!(matches!(expr, Expr::Literal { .. }));
+     }   
+
+     #[test]
+     fn test_precedence() {
+        let mut lexer = Lexer::new("1 + 2 * 3".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse();
+        if let Expr::Binary { right, .. } = expr {
+            assert!(matches!(*right, Expr::Binary { .. }))
+        }
+     }  
+
 }
