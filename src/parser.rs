@@ -249,7 +249,7 @@ impl Parser {
     }
 
     fn return_statement(&mut self) -> Stmt {
-        value = Box::new(self.expression());
+        value = self.expression();
         self.consume(TokenType::Semicolon, "Expected ';' after return statement.");
     }
 
