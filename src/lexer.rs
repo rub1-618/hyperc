@@ -10,6 +10,9 @@ pub struct Lexer {
 }
 
 impl Lexer {
+
+    // -- main functions --
+
     pub fn new(source: String) -> Lexer {
         Lexer {
             source,
@@ -29,87 +32,8 @@ impl Lexer {
         return self.tokens.clone();
     }
 
-    fn is_at_end(&self) -> bool {
-        return self.current >= self.source.len();
-    }
-
-    fn advance(&mut self) -> char {
-        let c = self.source.chars().nth(self.current).unwrap();
-        self.current += 1;
-        return c;
-    }
-
-    fn add_token(&mut self, token_type: TokenType) {
-        let lexeme: String = self.source[self.start..self.current].to_string();
-        let token = Token::new(token_type, lexeme, self.line);
-        self.tokens.push(token);
-    }
-
-    fn peek(&self) -> char {
-        if self.is_at_end() {return '\0';}
-        else {return  self.source.chars().nth(self.current).unwrap();}
-    }
-
-    fn peek_next(&self) -> char {
-        if self.current + 1 >= self.source.len() {
-            return '\0';
-        } else {
-            return self.source.chars().nth(self.current + 1).unwrap();
-        }
-    }
-
-    fn match_next(&mut self, expected: char) -> bool {
-        if self.is_at_end() {return false;}
-        if self.source.chars().nth(self.current).unwrap() != expected {return false;}
-
-        self.current+=1;
-        return true;
-    }
-
-    fn string(&mut self) {
-        while self.peek() != '"' && !self.is_at_end() {
-            if self.peek() != '\n' {
-                self.advance();
-            } else {
-                self.line += 1;
-            }
-        }
-        self.advance();
-        self.add_token(TokenType::StringLit);
-    }
-
-    fn is_digit(c: char) -> bool {
-        return c >= '0' && c <= '9';
-    }
-
+    // -- scan + identify --
     
-    fn is_alpha(c: char) -> bool {
-        if c.is_alphabetic() || c == '_' {
-            return true;
-        } else {return false;}
-    }
-
-    fn is_alphanumeric(c: char) -> bool {
-        if Self::is_alpha(c) || Self::is_digit(c) {
-            return true;
-        } else {return false;}
-    }
-
-    fn number(&mut self) {
-        while Self::is_digit(self.peek()) {
-            self.advance();
-        }
-        
-        if self.peek() == '.' && Self::is_digit(self.peek_next()) {
-            self.advance();
-
-            while Self::is_digit(self.peek()) {
-                self.advance();
-            }
-        }
-        self.add_token(TokenType::Number);
-    }
-
     fn identifier(&mut self){
         while Self::is_alphanumeric(self.peek()) {
             self.advance();
@@ -270,9 +194,92 @@ impl Lexer {
             _ => {},
         }
     }
+
+    // -- other guts and parts of the mechanism --
+
+    fn is_at_end(&self) -> bool {
+        return self.current >= self.source.len();
+    }
+
+    fn advance(&mut self) -> char {
+        let c = self.source.chars().nth(self.current).unwrap();
+        self.current += 1;
+        return c;
+    }
+
+    fn add_token(&mut self, token_type: TokenType) {
+        let lexeme: String = self.source[self.start..self.current].to_string();
+        let token = Token::new(token_type, lexeme, self.line);
+        self.tokens.push(token);
+    }
+
+    fn peek(&self) -> char {
+        if self.is_at_end() {return '\0';}
+        else {return  self.source.chars().nth(self.current).unwrap();}
+    }
+
+    fn peek_next(&self) -> char {
+        if self.current + 1 >= self.source.len() {
+            return '\0';
+        } else {
+            return self.source.chars().nth(self.current + 1).unwrap();
+        }
+    }
+
+    fn match_next(&mut self, expected: char) -> bool {
+        if self.is_at_end() {return false;}
+        if self.source.chars().nth(self.current).unwrap() != expected {return false;}
+
+        self.current+=1;
+        return true;
+    }
+
+    fn string(&mut self) {
+        while self.peek() != '"' && !self.is_at_end() {
+            if self.peek() != '\n' {
+                self.advance();
+            } else {
+                self.line += 1;
+            }
+        }
+        self.advance();
+        self.add_token(TokenType::StringLit);
+    }
+
+    fn is_digit(c: char) -> bool {
+        return c >= '0' && c <= '9';
+    }
+
+    
+    fn is_alpha(c: char) -> bool {
+        if c.is_alphabetic() || c == '_' {
+            return true;
+        } else {return false;}
+    }
+
+    fn is_alphanumeric(c: char) -> bool {
+        if Self::is_alpha(c) || Self::is_digit(c) {
+            return true;
+        } else {return false;}
+    }
+
+    fn number(&mut self) {
+        while Self::is_digit(self.peek()) {
+            self.advance();
+        }
+        
+        if self.peek() == '.' && Self::is_digit(self.peek_next()) {
+            self.advance();
+
+            while Self::is_digit(self.peek()) {
+                self.advance();
+            }
+        }
+        self.add_token(TokenType::Number);
+    }
 }
 
-
+// tests
 
 #[cfg(test)]
 mod tests {

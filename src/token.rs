@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
 
-// Single character tokens
+    // Single character tokens
     LeftParen, RightParen, LeftBrace, RightBrace, Colon,            // | () | {} | : |
     LeftBracket, RightBracket, Comma, Dot, Semicolon,             // | [] | , | . | ; |
 
