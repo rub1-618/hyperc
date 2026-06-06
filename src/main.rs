@@ -25,8 +25,8 @@ fn run(source: &str){
     let mut lexer = lexer::Lexer::new(source.to_string());
     let tokens = lexer.scan_tokens();
     let mut _parser = parser::Parser::new(tokens.clone());
-    let expr = _parser.parse();
-    println!("{:?}", expr);
+    let stmt = _parser.parse();
+    println!("{:?}", stmt);
     println!("{:?}", tokens);
 }
 

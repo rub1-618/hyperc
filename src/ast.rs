@@ -13,6 +13,12 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
+
+    Call {
+        callee: Box<Expr>,
+        arguments: Vec<Expr>,
+        paren: Token,
+    },
     
     Literal {
         value: LiteralValue,
@@ -21,10 +27,10 @@ pub enum Expr {
     Grouping {
         expr: Box<Expr>,
     },
-
+    
     Variable {
         name: Token,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +46,8 @@ pub enum Stmt {
     Let {
         name: Token,
         value: Box<Expr>,
+        kind: VarKind,
+        var_type: VarType,
     },
 
     Assign {
@@ -63,20 +71,20 @@ pub enum Stmt {
     },
 
     For {
-        initializer: Option<Box<Expr>>,
+        initializer: Option<Box<Stmt>>,
         condition: Option<Box<Expr>>,
         increment: Option<Box<Expr>>,
-        statements: Vec<Stmt>,
+        statements: Box<Stmt>,
     },
 
     Return {
-        value: Box<Expr>,
+        value: Option<Box<Expr>>,
     },
 
     Function {
         name: Token,
         params: Vec<Token>,
-        statements: Vec<Stmt>,
+        statements: Box<Stmt>,
     },
 
     Class {
@@ -92,4 +100,19 @@ pub enum LiteralValue {
     String(String),
     Bool(bool),
     Null,
+}
+
+#[derive(Debug, Clone)]
+pub enum VarKind {
+    Mut,
+    Const,
+}
+
+#[derive(Debug, Clone)]
+pub enum VarType {
+    Int,
+    Float,
+    Str,
+    Char,
+    Bool,
 }

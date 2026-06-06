@@ -63,6 +63,11 @@ impl Lexer {
             "const" => TokenType::Const,
             "struct" => TokenType::Struct,
             "mut" => TokenType::Mut,
+            "int" => TokenType::IntType,
+            "float" => TokenType::FloatType,
+            "str" => TokenType::StrType,
+            "char" => TokenType::CharType,
+            "bool" => TokenType::BoolType,
 
             _ => TokenType::Identifier
 

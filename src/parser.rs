@@ -1,5 +1,8 @@
+use std::collections::btree_map::Values;
+
+use crate::token::TokenType::{LeftParen, RightParen};
 use crate::token::{TokenType, Token};
-use crate::ast::{Stmt, Expr, LiteralValue};
+use crate::ast::{Expr, LiteralValue, Stmt, VarKind, VarType};
 
 #[derive(Debug, Clone)]
 pub struct Parser {
@@ -97,10 +100,38 @@ impl Parser {
             return Expr::Unary { operator, right: Box::new(right), };
         }
 
-        return self.primary();
+        return self.call();
+    }
+
+    // call
+
+    fn call(&mut self) -> Expr {
+        let mut expr = self.primary();
+
+        loop {
+            if self.match_token(&[TokenType::LeftParen]) {
+                expr = self.finish_call(expr);
+            } else { break; }
+        }
+
+        return expr;
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Expr {
+        let mut arguments = vec![];
+        if !self.check(TokenType::RightParen) {
+            arguments.push(self.expression());
+            while self.match_token(&[TokenType::Comma]) {
+                arguments.push(self.expression());
+            }
+        }
+
+        let paren: Token = self.consume(TokenType::RightParen, "Expected ')' for the function.").clone();
+        return Expr::Call { callee: Box::new(callee), arguments, paren };
     }
 
     // primary
+    
     fn primary(&mut self) -> Expr {
         if self.match_token(&[TokenType::False]) {
             return Expr::Literal { value: LiteralValue::Bool(false)};
@@ -119,6 +150,10 @@ impl Parser {
             return Expr::Literal { value: LiteralValue::Number(self.previous().lexeme.parse::<f64>().unwrap()) }
         }
 
+        if self.match_token(&[TokenType::Identifier]) {
+            return Expr::Variable { name: self.previous().clone() }
+        }
+
         if self.match_token(&[TokenType::LeftParen]) {    
         let expr: Expr  = self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after expr.");
@@ -131,7 +166,7 @@ impl Parser {
     // ! -- statements matching --
 
     fn statement(&mut self) -> Stmt {
-        
+
         // print
 
         if self.match_token(&[TokenType::Print]) {
@@ -168,6 +203,30 @@ impl Parser {
             return self.while_statement();
         }
 
+        // for
+
+        if self.match_token(&[TokenType::For]) {
+            return self.for_statement();
+        }
+
+        // return 
+
+        if self.match_token(&[TokenType::Return]) {
+            return self.return_statement();
+        }
+
+        // func
+
+        if self.match_token(&[TokenType::Func]) {
+            return self.func_declaration();
+        }
+
+        // class
+
+        if self.match_token(&[TokenType::Class]) {
+            return self.class_declaration();
+        }
+
         // else -> expr
 
         return self.expression_statement();
@@ -186,16 +245,42 @@ impl Parser {
     // let
 
     fn let_declaration_statement(&mut self) -> Stmt {
+        let kind = if self.match_token(&[TokenType::Mut]) {
+            VarKind::Mut
+        } else if self.match_token(&[TokenType::Const]) {
+            VarKind::Const
+        } else {
+            panic!("No variable kind specified. Suggest adding 'mut' / 'const'");
+        };
+
         let name: Token = self.consume(TokenType::Identifier, "Variable name expected.").clone();
+        self.consume(TokenType::Colon, "Expected ':' before type declaration.");
 
-
+        let var_type = if self.match_token(&[TokenType::IntType]) {
+            VarType::Int
+        } else if self.match_token(&[TokenType::FloatType]) {
+            VarType::Float
+        } else if self.match_token(&[TokenType::StrType]) {
+            VarType::Str
+        } else if self.match_token(&[TokenType::CharType]) {
+            VarType::Char
+        } else if self.match_token(&[TokenType::BoolType]) {
+            VarType::Bool
+            
+            // todo
+        // } if self.match_token(&[TokenType::ArrType]) {
+ 
+        } else {
+            panic!("Expected variable type.")
+        };
+        
         let mut value: Expr = Expr::Literal { value: LiteralValue::Null };
         if self.match_token(&[TokenType::Equal]) {
             value = self.expression(); 
         }
 
         self.consume(TokenType::Semicolon, "Expected ';' after value.");
-        return Stmt::Let {  name, value: Box::new( value ) };
+        return Stmt::Let {  name, value: Box::new( value ), kind, var_type };
     }
 
     // assignment
@@ -248,9 +333,93 @@ impl Parser {
         return Stmt::While { conditions: Box::new(conditions), statements: Box::new(statements) };
     }
 
+    // for
+
+    fn for_statement(&mut self) -> Stmt {
+        self.consume(TokenType::LeftParen, "Expected '(' in for statement.");
+        
+        let initializer = if self.check(TokenType::Semicolon) {
+            None
+        } else if self.match_token(&[TokenType::Let]) {
+            Some(Box::new(self.let_declaration_statement()))
+        } else {
+            Some(Box::new(self.expression_statement()))
+        };
+
+        let condition = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(Box::new(self.expression()))
+        };
+
+        self.consume(TokenType::Semicolon, "Expected ';' after value.");
+
+        let increment = if self.check(TokenType::RightParen) {
+            None
+        } else {
+            Some(Box::new(self.expression()))
+        };
+
+        self.consume(TokenType::RightParen, "Expected ')' in for statement.");
+
+        let statements = Box::new(self.statement());
+        return Stmt::For { initializer, condition, increment, statements };
+    }
+
+    // return
+
     fn return_statement(&mut self) -> Stmt {
-        value = self.expression();
+        let value = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(Box::new(self.expression()))
+        };
+        
         self.consume(TokenType::Semicolon, "Expected ';' after return statement.");
+        return  Stmt::Return { value };
+    }
+
+    // func
+
+    fn func_declaration(&mut self) -> Stmt {
+        let name = self.consume(TokenType::Identifier, "No identifier for the function specified.").clone();
+        self.consume(TokenType::LeftParen, "Expected '(' in function statement.");
+        let mut params = vec![];
+        if !self.check(TokenType::RightParen) {
+            params.push(self.consume(TokenType::Identifier, "Expected value in function params after ','").clone());
+            while self.match_token(&[TokenType::Comma]) {
+                params.push(self.consume(TokenType::Identifier, "Expected value in function params after ','").clone());
+            }
+        }
+        self.consume(TokenType::RightParen, "Expected ')' in function statement.");
+
+        self.consume(TokenType::LeftBrace, "Expected '{' in function body.");
+        let statements = Box::new(self.block_statement());
+        return Stmt::Function { name, params, statements };
+    }
+
+    // class
+
+    fn class_declaration(&mut self) -> Stmt {
+        let name = self.consume(TokenType::Identifier, "No identifier for the class specified.").clone();
+        let superclass = if self.match_token(&[TokenType::LeftParen]) {
+            let sc = self.consume(TokenType::Identifier, "Expected value in function params after ','").clone();
+            self.consume(TokenType::RightParen, "Expected ')' after superclass identifier.");
+            Some(sc)
+        } else {
+            None
+        };
+
+        self.consume(TokenType::LeftBrace, "Expected '{' before class body.");
+
+        let mut methods = vec![];
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            self.consume(TokenType::Func, "Expected 'func' before the method identifier.");
+            methods.push(self.func_declaration());
+        }
+
+        self.consume(TokenType::RightBrace, "Expected '}' after class body.");
+        return Stmt::Class { name, superclass, methods }
     }
 
     // else: expression
@@ -321,7 +490,7 @@ impl Parser {
     
 }
 
-// -- tests --
+// ! -- tests 1 --
 
 // #[cfg(test)]
 // mod tests {
@@ -403,3 +572,102 @@ impl Parser {
 //      }  
 
 // }
+
+// ! -- tests 2 --
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+
+    #[test]
+    fn test_decl() {
+        let mut lexer = Lexer::new("let const x: int = 5;".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Let { .. }));
+    }
+
+    #[test]
+    fn test_print() {
+        let mut lexer = Lexer::new("print(x);".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Print { .. }));
+    }
+    
+    #[test]
+    fn test_assign() {
+        let mut lexer = Lexer::new("x = 7;".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Assign { .. }));
+    }
+    
+    #[test]
+    fn test_block() {
+        let mut lexer = Lexer::new("{ let mut x: str = \"hello from block!\"; }".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Block { .. }));
+    }
+    
+    #[test]
+    fn test_while() {
+        let mut lexer = Lexer::new("while (x < 10) { x + 1; }".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::While { .. }));
+    }
+
+    #[test]
+    fn test_for() {
+        let mut lexer = Lexer::new("for (let mut i: int = 0; i < 20; i + 1) { print(\"hello\"); }".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::For { .. }));
+    }
+    
+    #[test]
+    fn test_func() {
+        let mut lexer = Lexer::new("func foo( a ) { print( a ); }".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Function { .. }));
+    }
+
+    #[test]
+    fn test_return() {
+        let mut lexer = Lexer::new("return a + b;".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Return { .. }));
+    }
+
+    #[test]
+    fn test_class() {
+        let mut lexer = Lexer::new("class Dog (Animal) { func bark() { print(\"bark\"); } }".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Class { .. }));
+    }
+
+    #[test]
+    fn test_stacked() {
+        let mut lexer = Lexer::new("class Dog (Animal) { func bark() { let mut a: str = \"meow\"; a = \"bark\"; print( a ); } }".to_string());
+        let tokens = lexer.scan_tokens();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        assert!(matches!(stmt[0], Stmt::Class { .. }));
+    }
+
+}
