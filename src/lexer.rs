@@ -4,9 +4,9 @@ use crate::token::{TokenType, Token};
 pub struct Lexer {
     source: String,
     tokens: Vec<Token>,
-    start: usize,
     current: usize,
     line: usize,
+    start: usize,
 }
 
 impl Lexer {
@@ -28,7 +28,7 @@ impl Lexer {
             self.start = self.current;
             self.scan_token();
         }
-        self.tokens.push(Token::new(TokenType::Eof, "".to_string(), self.line));
+        self.tokens.push(Token::new(TokenType::Eof, "".to_string(), self.line, self.current, self.current));
         return self.tokens.clone();
     }
 
@@ -214,7 +214,7 @@ impl Lexer {
 
     fn add_token(&mut self, token_type: TokenType) {
         let lexeme: String = self.source[self.start..self.current].to_string();
-        let token = Token::new(token_type, lexeme, self.line);
+        let token = Token::new(token_type, lexeme, self.line, self.start, self.current);
         self.tokens.push(token);
     }
 

@@ -6,6 +6,7 @@ mod lexer;
 mod token;
 mod parser;
 mod ast;
+mod error;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -25,8 +26,10 @@ fn run(source: &str){
     let mut lexer = lexer::Lexer::new(source.to_string());
     let tokens = lexer.scan_tokens();
     let mut _parser = parser::Parser::new(tokens.clone());
-    let stmt = _parser.parse();
-    println!("{:?}", stmt);
+    match _parser.parse() {
+        Ok(stmts) => println!("{:?}", stmts),
+        Err(e) => error::report(source, &e),
+    }
     println!("{:?}", tokens);
 }
 
