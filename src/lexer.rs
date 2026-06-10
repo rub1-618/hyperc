@@ -192,6 +192,8 @@ impl Lexer {
 
             '"' => {self.string();}
 
+            '\'' => {self.char();},
+
             '0'..='9' => {self.number();},
 
             'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
@@ -251,6 +253,17 @@ impl Lexer {
         self.add_token(TokenType::StringLit);
     }
 
+    // todo: handle non-single char errors
+    fn char(&mut self) {
+        self.advance();
+        if self.peek() == '\'' {
+            self.advance();
+            self.add_token(TokenType::CharLit);
+        } else {
+            return;
+        }
+    }
+
     fn is_digit(c: char) -> bool {
         return c >= '0' && c <= '9';
     }
@@ -269,18 +282,23 @@ impl Lexer {
     }
 
     fn number(&mut self) {
+        let mut is_float = false;
         while Self::is_digit(self.peek()) {
             self.advance();
         }
-        
         if self.peek() == '.' && Self::is_digit(self.peek_next()) {
+            is_float = true;
             self.advance();
-
             while Self::is_digit(self.peek()) {
                 self.advance();
             }
         }
-        self.add_token(TokenType::Number);
+
+        if is_float {
+            self.add_token(TokenType::FloatLit);   
+        } else {
+            self.add_token(TokenType::IntLit);
+        }
     }
 }
 
@@ -352,19 +370,19 @@ mod tests {
     fn test_numbers(){
         let mut lexer = Lexer::new("12345".to_string());
         let tokens = lexer.scan_tokens();
-        assert_eq!(tokens[0].token_type, TokenType::Number);
+        assert_eq!(tokens[0].token_type, TokenType::IntLit);
     
         let mut lexer = Lexer::new("6.0".to_string());
         let tokens = lexer.scan_tokens();
-        assert_eq!(tokens[0].token_type, TokenType::Number);
+        assert_eq!(tokens[0].token_type, TokenType::FloatLit);
 
         let mut lexer = Lexer::new("228".to_string());
         let tokens = lexer.scan_tokens();
-        assert_eq!(tokens[0].token_type, TokenType::Number);
+        assert_eq!(tokens[0].token_type, TokenType::IntLit);
 
         let mut lexer = Lexer::new("3.14".to_string());
         let tokens = lexer.scan_tokens();
-        assert_eq!(tokens[0].token_type, TokenType::Number);
+        assert_eq!(tokens[0].token_type, TokenType::FloatLit);
     }
 
     #[test]
@@ -386,7 +404,7 @@ mod tests {
         assert_eq!(tokens[0].token_type, TokenType::Let);
         assert_eq!(tokens[1].token_type, TokenType::Identifier);
         assert_eq!(tokens[2].token_type, TokenType::Equal);
-        assert_eq!(tokens[3].token_type, TokenType::Number);
+        assert_eq!(tokens[3].token_type, TokenType::IntLit);
         assert_eq!(tokens[4].token_type, TokenType::Semicolon);
         assert_eq!(tokens[5].token_type, TokenType::Let);
         assert_eq!(tokens[6].token_type, TokenType::Identifier);

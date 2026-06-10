@@ -96,8 +96,10 @@ pub enum Stmt {
 
 #[derive(Debug, Clone)]
 pub enum LiteralValue {
-    Number(f64),
+    Int(i64),
+    Float(f64),
     String(String),
+    Char(char),
     Bool(bool),
     Null,
 }

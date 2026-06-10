@@ -18,7 +18,7 @@ pub enum TokenType {
     Arrow,                                                          // | -> |
 
     // Literals
-    Identifier, StringLit, Number,
+    Identifier, StringLit, CharLit, IntLit, FloatLit,
 
     // Keywords
     And, Or, Class, If, Elif, Else, True, False,               // | && | || | class(){} | if(){} | elif(){} | else{} | true | false |

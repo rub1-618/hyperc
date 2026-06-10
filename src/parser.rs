@@ -144,8 +144,17 @@ impl Parser {
         if self.match_token(&[TokenType::StringLit]) {
             return Ok(Expr::Literal { value: LiteralValue::String(self.previous().lexeme.clone()) })
         }
-        if self.match_token(&[TokenType::Number]) {
-            return Ok(Expr::Literal { value: LiteralValue::Number(self.previous().lexeme.parse::<f64>().unwrap()) })
+
+        if self.match_token(&[TokenType::CharLit]) {
+            return Ok(Expr::Literal { value: LiteralValue::Char(self.previous().lexeme.chars().nth(1).unwrap())})
+        }
+
+        if self.match_token(&[TokenType::IntLit]) {
+            return Ok(Expr::Literal { value: LiteralValue::Int(self.previous().lexeme.parse::<i64>().unwrap()) })
+        }
+
+        if self.match_token(&[TokenType::FloatLit]) {
+            return Ok(Expr::Literal { value: LiteralValue::Float(self.previous().lexeme.parse::<f64>().unwrap()) })
         }
 
         if self.match_token(&[TokenType::Identifier]) {
