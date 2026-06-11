@@ -32,11 +32,17 @@ fn run(source: &str) {
         Ok(stmts) => {
             let mut _resolver = resolver::Resolver::new();
             match _resolver.resolve(&stmts) {
-                Ok(()) => println!("{:?}", stmts),
-                Err(e) => error::report(source, &e),
+                Ok(()) => {
+                    let mut _checker = checker::TypeChecker::new();
+                    match _checker.check(&stmts) {
+                        Ok(()) => println!("{:?}", stmts),
+                        Err(e) => error::report_type(source, &e),
+                    }
+                },
+                Err(e) => error::report_parse(source, &e),
             }
         }
-        Err(e) => error::report(source, &e),
+        Err(e) => error::report_parse(source, &e),
     }
     println!("{:?}", tokens);
 }

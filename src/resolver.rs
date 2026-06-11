@@ -97,14 +97,14 @@ impl Resolver {
                 Ok(())
             },
 
-            Stmt::Function { name, params, statements } => {
+            Stmt::Function { name, params, statements, return_type: _ } => {
                 self.fc_declare(name)?;
                 self.define(name);
                 self.begin_scope();
                 let result = ( || {
                     for param in params {
-                        self.fc_declare(param)?;
-                        self.define(param);
+                        self.fc_declare(&param.0)?;
+                        self.define(&param.0);
                     }
                     self.resolve_stmt(statements)?;
                     Ok(())
@@ -320,7 +320,7 @@ use crate::resolver;
 
     #[test]
     fn test_parameter_leak() {
-        let mut lexer = Lexer::new("func foo(i){} let mut z: int = i;".to_string());
+        let mut lexer = Lexer::new("func foo(i: int){} let mut z: int = i;".to_string());
         let _tokens = lexer.scan_tokens();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
@@ -334,7 +334,7 @@ use crate::resolver;
     
     #[test]
     fn test_func_leak() {
-        let mut lexer = Lexer::new("func foo(i){ let mut b: int = i; }".to_string());
+        let mut lexer = Lexer::new("func foo(i: char){ let mut b: int = i; }".to_string());
         let _tokens = lexer.scan_tokens();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
@@ -344,7 +344,7 @@ use crate::resolver;
 
     #[test]
     fn test_func_double() {
-        let mut lexer = Lexer::new("func foo(i, i){}".to_string());
+        let mut lexer = Lexer::new("func foo(i: int, i:int){}".to_string());
         let _tokens = lexer.scan_tokens();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();

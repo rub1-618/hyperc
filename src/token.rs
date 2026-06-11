@@ -3,7 +3,7 @@ pub enum TokenType {
 
     // Single character tokens
     LeftParen, RightParen, LeftBrace, RightBrace, Colon,            // | () | {} | : |
-    LeftBracket, RightBracket, Comma, Dot, Semicolon,             // | [] | , | . | ; |
+    LeftBracket, RightBracket, Comma, Dot, Semicolon,               // | [] | , | . | ; |
 
     // 1 or 2 char tokens
     Bang, BangEqual,                                                // | ! | != | (works as NOT too)
@@ -21,9 +21,9 @@ pub enum TokenType {
     Identifier, StringLit, CharLit, IntLit, FloatLit,
 
     // Keywords
-    And, Or, Class, If, Elif, Else, True, False,               // | && | || | class(){} | if(){} | elif(){} | else{} | true | false |
+    And, Or, Class, If, Elif, Else, True, False,                    // | && | || | class(){} | if(){} | elif(){} | else{} | true | false |
     For, While, Func, Null, Print, Return, This, Let,               // | for(){} | while(){} | func(){} | null | print() | return ... | this | let |
-    Break, Continue, Import, From, Const, Struct, Mut,                  // | break | continue | import ... | import ... from ... | const ... | struct{} |
+    Break, Continue, Import, From, Const, Struct, Mut,              // | break | continue | import ... | import ... from ... | const ... | struct{} |
 
     // Types
     IntType,                                                        // | int |

@@ -83,8 +83,9 @@ pub enum Stmt {
 
     Function {
         name: Token,
-        params: Vec<Token>,
+        params: Vec<(Token, VarType)>,
         statements: Box<Stmt>,
+        return_type: Option<VarType>,
     },
 
     Class {

@@ -269,26 +269,7 @@ impl Parser {
         let name: Token = self.consume(TokenType::Identifier, "Variable name expected.")?;
         self.consume(TokenType::Colon, "Expected ':' before type declaration.")?;
 
-        let var_type = if self.match_token(&[TokenType::IntType]) {
-            VarType::Int
-        } else if self.match_token(&[TokenType::FloatType]) {
-            VarType::Float
-        } else if self.match_token(&[TokenType::StrType]) {
-            VarType::Str
-        } else if self.match_token(&[TokenType::CharType]) {
-            VarType::Char
-        } else if self.match_token(&[TokenType::BoolType]) {
-            VarType::Bool
-            
-            // todo
-        // } if self.match_token(&[TokenType::ArrType]) {
- 
-        } else {
-            return Err( ParseError { 
-                span: self.peek().start..self.peek().end, 
-                message: "Expected variable type.".to_string(),
-            })
-        };
+        let var_type = self.parse_type()?;
         
         let mut value: Expr = Expr::Literal { value: LiteralValue::Null };
         if self.match_token(&[TokenType::Equal]) {
@@ -400,18 +381,32 @@ impl Parser {
     fn func_declaration(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume(TokenType::Identifier, "No identifier for the function specified.")?;
         self.consume(TokenType::LeftParen, "Expected '(' in function statement.")?;
-        let mut params = vec![];
+        let mut params: Vec<(Token, VarType)> = vec![];
         if !self.check(TokenType::RightParen) {
-            params.push(self.consume(TokenType::Identifier, "Expected value in function params after ','")?);
+            let params_name= self.consume(TokenType::Identifier, "Expected type after value, consider adding, like 'a: int'")?;
+            self.consume(TokenType::Colon,  "Expected ':' in function params after value.")?;
+            let var_type = self.parse_type()?;
+            params.push((params_name, var_type));
+
             while self.match_token(&[TokenType::Comma]) {
-                params.push(self.consume(TokenType::Identifier, "Expected value in function params after ','")?);
+                let params_name= self.consume(TokenType::Identifier, "Expected type after value, consider adding, like 'a: int'")?;
+                self.consume(TokenType::Colon,  "Expected ':' in function params after value.")?;
+                let var_type = self.parse_type()?;
+                params.push((params_name, var_type));
             }
         }
         self.consume(TokenType::RightParen, "Expected ')' in function statement.")?;
+        
+        // -> 
+        let return_type = if self.match_token(&[TokenType::Arrow]) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
 
         self.consume(TokenType::LeftBrace, "Expected '{' in function body.")?;
         let statements = Box::new(self.block_statement()?);
-        return Ok(Stmt::Function { name, params, statements })
+        return Ok(Stmt::Function { name, params, statements, return_type })
     }
 
     // class
@@ -495,6 +490,30 @@ impl Parser {
 
         return false;
     }
+
+    fn parse_type(&mut self) -> Result<VarType, ParseError> {
+        if self.match_token(&[TokenType::IntType]) {
+            return Ok(VarType::Int)
+        } else if self.match_token(&[TokenType::FloatType]) {
+            return Ok(VarType::Float)
+        } else if self.match_token(&[TokenType::StrType]) {
+            return Ok(VarType::Str)
+        } else if self.match_token(&[TokenType::CharType]) {
+            return Ok(VarType::Char)
+        } else if self.match_token(&[TokenType::BoolType]) {
+            return Ok(VarType::Bool)
+            
+            // todo
+        // } if self.match_token(&[TokenType::ArrType]) {
+ 
+        } else {
+            return Err( ParseError { 
+                span: self.peek().start..self.peek().end, 
+                message: "Expected variable type.".to_string(),
+            })
+        };
+    }
+    
 
     fn consume(&mut self, token_type:TokenType, message: &str) -> Result<Token, ParseError> {
         if self.check(token_type) {
@@ -652,7 +671,7 @@ mod tests {
     
     #[test]
     fn test_func() {
-        let mut lexer = Lexer::new("func foo( a ) { print( a ); }".to_string());
+        let mut lexer = Lexer::new("func foo( a: int ) { print( a ); }".to_string());
         let tokens = lexer.scan_tokens();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
