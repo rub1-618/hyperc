@@ -26,25 +26,29 @@ fn main() {
 
 fn run(source: &str) {
     let mut lexer = lexer::Lexer::new(source.to_string());
-    let tokens = lexer.scan_tokens();
-    let mut _parser = parser::Parser::new(tokens.clone());
-    match _parser.parse() {
-        Ok(stmts) => {
-            let mut _resolver = resolver::Resolver::new();
-            match _resolver.resolve(&stmts) {
-                Ok(()) => {
-                    let mut _checker = checker::TypeChecker::new();
-                    match _checker.check(&stmts) {
-                        Ok(()) => println!("{:?}", stmts),
-                        Err(e) => error::report_type(source, &e),
+    match lexer.scan_tokens() {
+        Ok(tokens) => {
+            let mut _parser = parser::Parser::new(tokens.clone());
+            match _parser.parse() {
+                Ok(stmts) => {
+                    let mut _resolver = resolver::Resolver::new();
+                    match _resolver.resolve(&stmts) {
+                        Ok(()) => {
+                            let mut _checker = checker::TypeChecker::new();
+                            match _checker.check(&stmts) {
+                                Ok(()) => println!("{:?}", stmts),
+                                Err(e) => error::report_type(source, &e),
+                            }
+                        },
+                        Err(e) => error::report_parse(source, &e),
                     }
-                },
+                }
                 Err(e) => error::report_parse(source, &e),
             }
+            println!("{:?}", tokens);
         }
-        Err(e) => error::report_parse(source, &e),
+        Err(e) => error::report_lex(source, &e),
     }
-    println!("{:?}", tokens);
 }
 
 fn run_file(path: &str) {

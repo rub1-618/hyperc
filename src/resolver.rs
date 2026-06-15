@@ -235,7 +235,7 @@ use crate::resolver;
     #[test]
     fn test_resolve_ok() {
         let mut lexer = Lexer::new("let mut x: int = 5;".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -245,7 +245,7 @@ use crate::resolver;
     #[test]
     fn test_undefined() {
         let mut lexer = Lexer::new("let mut y: int = z;".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -259,7 +259,7 @@ use crate::resolver;
     #[test]
     fn test_self_ref() {
         let mut lexer = Lexer::new("let mut z: int = z;".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -273,7 +273,7 @@ use crate::resolver;
     #[test]
     fn test_redeclare() {
         let mut lexer = Lexer::new("let mut x: int = 5; let mut x: int = 10;".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -287,7 +287,7 @@ use crate::resolver;
     #[test]
     fn test_block() {
         let mut lexer = Lexer::new("let mut x: int = 5; { let mut y: int = x;}".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -297,7 +297,7 @@ use crate::resolver;
     #[test]
     fn test_for_leak() {
         let mut lexer = Lexer::new("for(let mut i: int = 0; i<5; i+1){} let mut z: int = i;".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -311,7 +311,7 @@ use crate::resolver;
     #[test]
     fn test_for_inner() {
         let mut lexer = Lexer::new("let mut x: int = 5; for(let mut i: int = 0; i<x; i+2){}".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -321,7 +321,7 @@ use crate::resolver;
     #[test]
     fn test_parameter_leak() {
         let mut lexer = Lexer::new("func foo(i: int){} let mut z: int = i;".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -335,7 +335,7 @@ use crate::resolver;
     #[test]
     fn test_func_leak() {
         let mut lexer = Lexer::new("func foo(i: char){ let mut b: int = i; }".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -345,7 +345,7 @@ use crate::resolver;
     #[test]
     fn test_func_double() {
         let mut lexer = Lexer::new("func foo(i: int, i:int){}".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -359,7 +359,7 @@ use crate::resolver;
     #[test]
     fn test_class() {
         let mut lexer = Lexer::new("class C { func foo(){ let mut q: int = 1; } }".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
@@ -369,7 +369,7 @@ use crate::resolver;
     #[test]
     fn test_block_self_ref() {
         let mut lexer = Lexer::new("{ let const i: char = i; }".to_string());
-        let _tokens = lexer.scan_tokens();
+        let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();

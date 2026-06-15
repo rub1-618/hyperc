@@ -1,3 +1,4 @@
+use crate::error::{LexerError};
 use std::string::String;
 use crate::token::{TokenType, Token};
 
@@ -11,7 +12,7 @@ pub struct Lexer {
 
 impl Lexer {
 
-    // -- main functions --
+    // ! -- main functions --
 
     pub fn new(source: String) -> Lexer {
         Lexer {
@@ -23,23 +24,23 @@ impl Lexer {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
+    pub fn scan_tokens(&mut self) -> Result<Vec<Token>, LexerError> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token();
+            self.scan_token()?;
         }
         self.tokens.push(Token::new(TokenType::Eof, "".to_string(), self.line, self.current, self.current));
-        return self.tokens.clone();
+        Ok(self.tokens.clone())
     }
 
-    // -- scan + identify --
+    // ! -- scan + identify --
     
     fn identifier(&mut self){
         while Self::is_alphanumeric(self.peek()) {
             self.advance();
         }
 
-        let text: &str = &self.source[self.start..self.current]; // вырежи текст из source
+        let text = &self.source[self.start..self.current];
         let token_type = match text {
 
             "class" => TokenType::Class,
@@ -75,134 +76,148 @@ impl Lexer {
         self.add_token(token_type)
     }
 
-    fn scan_token(&mut self) {
+    fn scan_token(&mut self) -> Result<(), LexerError> {
         let c: char = self.advance();
         match c {
-            '(' => self.add_token(TokenType::LeftParen),
-            ')' => self.add_token(TokenType::RightParen),
-            '{' => self.add_token(TokenType::LeftBrace),
-            '}' => self.add_token(TokenType::RightBrace),
-            '[' => self.add_token(TokenType::LeftBracket),
-            ']' => self.add_token(TokenType::RightBracket),
-            ',' => self.add_token(TokenType::Comma),
-            '.' => self.add_token(TokenType::Dot),
-            ':' => self.add_token(TokenType::Colon),
-            ';' => self.add_token(TokenType::Semicolon),
+            '(' => Ok(self.add_token(TokenType::LeftParen)),
+            ')' => Ok(self.add_token(TokenType::RightParen)),
+            '{' => Ok(self.add_token(TokenType::LeftBrace)),
+            '}' => Ok(self.add_token(TokenType::RightBrace)),
+            '[' => Ok(self.add_token(TokenType::LeftBracket)),
+            ']' => Ok(self.add_token(TokenType::RightBracket)),
+            ',' => Ok(self.add_token(TokenType::Comma)),
+            '.' => Ok(self.add_token(TokenType::Dot)),
+            ':' => Ok(self.add_token(TokenType::Colon)),
+            ';' => Ok(self.add_token(TokenType::Semicolon)),
 
             '!' => {
                 if self.match_next('=') {
-                    self.add_token(TokenType::BangEqual);
+                    Ok(self.add_token(TokenType::BangEqual))
                 } else {
-                    self.add_token(TokenType::Bang);
+                    Ok(self.add_token(TokenType::Bang))
                 }
             }
 
             '=' => {
                 if self.match_next('=') {
-                    self.add_token(TokenType::EqualEqual);
+                    Ok(self.add_token(TokenType::EqualEqual))
                 } else {
-                    self.add_token(TokenType::Equal);
+                    Ok(self.add_token(TokenType::Equal))
                 }
             }
 
             '>' => {
                 if self.match_next('=') {
-                    self.add_token(TokenType::GreaterEqual);
+                    Ok(self.add_token(TokenType::GreaterEqual))
                 } else {
-                    self.add_token(TokenType::Greater);
+                    Ok(self.add_token(TokenType::Greater))
                 }
             }
 
             '<' => {
                 if self.match_next('=') {
-                    self.add_token(TokenType::LessEqual);
+                    Ok(self.add_token(TokenType::LessEqual))
                 } else {
-                    self.add_token(TokenType::Less);
+                    Ok(self.add_token(TokenType::Less))
                 }
             }
 
             '+' => {
                 if self.match_next('=') {
-                    self.add_token(TokenType::PlusEqual);
+                    Ok(self.add_token(TokenType::PlusEqual))
                 } else if self.match_next('+') {
-                    self.add_token(TokenType::PlusPlus);
+                    Ok(self.add_token(TokenType::PlusPlus))
                 } else {
-                    self.add_token(TokenType::Plus);
+                    Ok(self.add_token(TokenType::Plus))
                 }
             }
 
             '-' => {
                 if self.match_next('=') {
-                    self.add_token(TokenType::MinusEqual);
+                    Ok(self.add_token(TokenType::MinusEqual))
                 } else if self.match_next('-') {
-                    self.add_token(TokenType::MinusMinus);
+                    Ok(self.add_token(TokenType::MinusMinus))
                 } else if self.match_next('>'){
-                    self.add_token(TokenType::Arrow);
+                    Ok(self.add_token(TokenType::Arrow))
                 } else {
-                    self.add_token(TokenType::Minus);
+                    Ok(self.add_token(TokenType::Minus))
                 }
             }
 
             '*' => {
                 if self.match_next('*') {
                     if self.match_next('=') {
-                        self.add_token(TokenType::StarStarEqual);
+                        Ok(self.add_token(TokenType::StarStarEqual))
                     } else {
-                        self.add_token(TokenType::StarStar);
+                        Ok(self.add_token(TokenType::StarStar))
                     }
                 } else if self.match_next('=') {
-                    self.add_token(TokenType::StarEqual);
+                    Ok(self.add_token(TokenType::StarEqual))
                 } else {
-                    self.add_token(TokenType::Star);
+                    Ok(self.add_token(TokenType::Star))
                 }
             }
             
             '/' => {
                 if self.match_next('/') {
-                    while self.peek() != '\n' && !self.is_at_end() {self.advance();}
+                    Ok(while self.peek() != '\n' && !self.is_at_end() {self.advance();})
                 } else if self.match_next('=') {
-                    self.add_token(TokenType::SlashEqual);
+                    Ok(self.add_token(TokenType::SlashEqual))
                 } else {
-                    self.add_token(TokenType::Slash);
+                    Ok(self.add_token(TokenType::Slash))
                 }
             }
 
             '%' => {
                 if self.match_next('=') {
-                    self.add_token(TokenType::PercentEqual);
+                    Ok(self.add_token(TokenType::PercentEqual))
                 } else {
-                    self.add_token(TokenType::Percent);
+                    Ok(self.add_token(TokenType::Percent))
                 }
             }
 
             '&' => {
                 if self.match_next('&') {
-                    self.add_token(TokenType::And);
+                    Ok(self.add_token(TokenType::And))
+                } else {
+                    Err(LexerError {
+                        span: self.start..self.current, 
+                        message: "Unexpected '&'.".to_string(),}
+                    )
                 }
             }
             '|' => {
                 if self.match_next('|') {
-                    self.add_token(TokenType::Or);
+                    Ok(self.add_token(TokenType::Or))
+                } else {
+                    Err(LexerError {
+                        span: self.start..self.current, 
+                        message: "Unexpected '|'.".to_string(),}
+                    )
                 }
             }
 
-            ' ' | '\r' | '\t' => {},
+            ' ' | '\r' | '\t' => Ok({}),
 
-            '\n' => self.line  += 1,
+            '\n' => Ok(self.line  += 1),
 
-            '"' => {self.string();}
+            '"' => {Ok(self.string())}
 
-            '\'' => {self.char();},
+            '\'' => {self.char()},
 
-            '0'..='9' => {self.number();},
+            '0'..='9' => {Ok(self.number())},
 
-            'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
+            'a'..='z' | 'A'..='Z' | '_' => Ok(self.identifier()),
 
-            _ => {},
+            _ => Err(LexerError {
+                span: self.start..self.current, 
+                message: "Expected expression.".to_string(),}
+            ),
+
         }
     }
 
-    // -- other guts and parts of the mechanism --
+    // ! -- other guts and parts of the mechanism --
 
     fn is_at_end(&self) -> bool {
         return self.current >= self.source.len();
@@ -254,13 +269,16 @@ impl Lexer {
     }
 
     // todo: handle non-single char errors
-    fn char(&mut self) {
+    fn char(&mut self) -> Result<(), LexerError> {
         self.advance();
         if self.peek() == '\'' {
             self.advance();
-            self.add_token(TokenType::CharLit);
+            Ok(self.add_token(TokenType::CharLit))
         } else {
-            return;
+            return Err(LexerError { 
+                span: self.start..self.current, 
+                message: "Char must be a single character in ''.".to_string()
+            })
         }
     }
 
@@ -302,7 +320,7 @@ impl Lexer {
     }
 }
 
-// tests
+// ! tests
 
 #[cfg(test)]
 mod tests {
@@ -311,38 +329,38 @@ mod tests {
     #[test]
     fn test_keywords() {
         let mut lexer = Lexer::new("&&".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::And);
 
         let mut lexer = Lexer::new("||".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Or);
 
         let mut lexer = Lexer::new("let".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Let);
 
         let mut lexer = Lexer::new("class".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Class);
 
         let mut lexer = Lexer::new("break".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Break);
 
         let mut lexer = Lexer::new("null".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Null);
 
         let mut lexer = Lexer::new("mut".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Mut);
     }
 
     #[test]
     fn test_strings(){
         let mut lexer = Lexer::new("\"hello\"".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::StringLit);
     }
 
@@ -350,49 +368,49 @@ mod tests {
     fn test_operators(){
         
         let mut lexer = Lexer::new("++".to_string());
-        let tokens = lexer .scan_tokens();
+        let tokens = lexer .scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::PlusPlus);
 
         let mut lexer = Lexer::new("!=".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::BangEqual);
     
         let mut lexer = Lexer::new("*=".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::StarEqual);
 
         let mut lexer = Lexer::new("**=".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::StarStarEqual);
     }
 
     #[test]
     fn test_numbers(){
         let mut lexer = Lexer::new("12345".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::IntLit);
     
         let mut lexer = Lexer::new("6.0".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::FloatLit);
 
         let mut lexer = Lexer::new("228".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::IntLit);
 
         let mut lexer = Lexer::new("3.14".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::FloatLit);
     }
 
     #[test]
     fn test_comments(){
         let mut lexer = Lexer::new("// comment".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Eof);
 
         let mut lexer = Lexer::new("// _comment //".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Eof);
         
     }
@@ -400,7 +418,7 @@ mod tests {
     #[test]
     fn test_other(){
         let mut lexer = Lexer::new("let x = 15;\nlet y = \"y\";".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Let);
         assert_eq!(tokens[1].token_type, TokenType::Identifier);
         assert_eq!(tokens[2].token_type, TokenType::Equal);
@@ -414,7 +432,7 @@ mod tests {
         assert_eq!(tokens[10].token_type, TokenType::Eof);
 
         let mut lexer = Lexer::new("let x = true;".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Let);
         assert_eq!(tokens[0].token_type, TokenType::Let);
         assert_eq!(tokens[1].token_type, TokenType::Identifier);

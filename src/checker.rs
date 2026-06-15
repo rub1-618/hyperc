@@ -1,9 +1,4 @@
 use std::collections::HashMap;
-use std::ops::Range;
-use std::option;
-use ariadne::{ Report, ReportKind, Label, Source };
-use crate::checker::Type::Unit;
-use crate::token::TokenType::Return;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, Stmt, LiteralValue, VarKind, VarType};
 use crate::error::TypeError;
@@ -237,7 +232,7 @@ impl TypeChecker {
 
             Stmt::Print { value } => {self.infer(value)?; Ok(())}
 
-            Stmt::Let { name, value, kind, var_type } => {
+            Stmt::Let { name, value, kind: _, var_type } => {
                 let ty = self.infer(value)?;
                 let expected = Self::vartype_to_type(var_type);
                 if ty == expected {
@@ -267,6 +262,18 @@ impl TypeChecker {
                                 span: name.start..name.end, 
                                 message: "Mismatched type.".to_string() 
                             })
+            }
+
+            Stmt::Block { statements } => {
+                self.begin_scope();
+                let result = ( || {
+                    for statement in statements {
+                        self.check_stmt(statement)?;
+                    }
+                    Ok(())
+                })();
+                self.end_scope();
+                result
             }
 
             Stmt::If { params, then_branch, else_branch } => {
@@ -379,16 +386,11 @@ impl TypeChecker {
                 result
             }
 
-            Stmt::Block { statements } => {
-                self.begin_scope();
-                let result = ( || {
-                    for statement in statements {
-                        self.check_stmt(statement)?;
-                    }
-                    Ok(())
-                })();
-                self.end_scope();
-                result
+            Stmt::Class {  methods, .. } => {
+                for method in methods {
+                    self.check_stmt(method)?;
+                }
+                Ok(())
             }
 
             _ => Ok(())
@@ -429,7 +431,7 @@ mod tests {
 
     fn infer_source(src: &str) -> Result<Type, TypeError> {
         let mut lexer = Lexer::new(src  .to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());        
         let stmt = _parser.parse().unwrap();
         let mut _infer = TypeChecker::new();
@@ -440,7 +442,7 @@ mod tests {
 
     fn check_source(src: &str) -> Result<(), TypeError> {
         let mut lexer = Lexer::new(src  .to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());        
         let stmt = _parser.parse().unwrap();
         let mut _infer = TypeChecker::new();

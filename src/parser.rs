@@ -618,7 +618,7 @@ mod tests {
     #[test]
     fn test_decl() {
         let mut lexer = Lexer::new("let const x: int = 5;".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Let { .. }));
@@ -627,7 +627,7 @@ mod tests {
     #[test]
     fn test_print() {
         let mut lexer = Lexer::new("print(x);".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Print { .. }));
@@ -636,7 +636,7 @@ mod tests {
     #[test]
     fn test_assign() {
         let mut lexer = Lexer::new("x = 7;".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Assign { .. }));
@@ -645,7 +645,7 @@ mod tests {
     #[test]
     fn test_block() {
         let mut lexer = Lexer::new("{ let mut x: str = \"hello from block!\"; }".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Block { .. }));
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn test_while() {
         let mut lexer = Lexer::new("while (x < 10) { x + 1; }".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::While { .. }));
@@ -663,7 +663,7 @@ mod tests {
     #[test]
     fn test_for() {
         let mut lexer = Lexer::new("for (let mut i: int = 0; i < 20; i + 1) { print(\"hello\"); }".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::For { .. }));
@@ -672,7 +672,7 @@ mod tests {
     #[test]
     fn test_func() {
         let mut lexer = Lexer::new("func foo( a: int ) { print( a ); }".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Function { .. }));
@@ -681,7 +681,7 @@ mod tests {
     #[test]
     fn test_return() {
         let mut lexer = Lexer::new("return a + b;".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Return { .. }));
@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn test_class() {
         let mut lexer = Lexer::new("class Dog (Animal) { func bark() { print(\"bark\"); } }".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Class { .. }));
@@ -699,7 +699,7 @@ mod tests {
     #[test]
     fn test_stacked() {
         let mut lexer = Lexer::new("class Dog (Animal) { func bark() { let mut a: str = \"meow\"; a = \"bark\"; print( a ); } }".to_string());
-        let tokens = lexer.scan_tokens();
+        let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Class { .. }));
