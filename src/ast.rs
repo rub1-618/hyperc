@@ -1,5 +1,6 @@
 use std::string::String;
 use crate::token::{Token};
+use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -22,6 +23,7 @@ pub enum Expr {
     
     Literal {
         value: LiteralValue,
+        span: Range<usize>,
     },
     
     Grouping {
@@ -105,7 +107,7 @@ pub enum LiteralValue {
     Null,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum VarKind {
     Mut,
     Const,

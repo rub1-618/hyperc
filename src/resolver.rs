@@ -6,8 +6,8 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct Binding {
     ready: bool,
-    kind: VarKind,
-    var_type: VarType,
+    kind: VarKind, // todo
+    var_type: VarType, // todo
 }
 
 // ! -- resolver --
@@ -51,6 +51,17 @@ impl Resolver {
 
             Stmt::Assign { name, value } => {
                 self.resolve_local(name)?;
+                match self.lookup_binding(name) {
+                    Some(b) => {
+                        if b.kind == VarKind::Const {
+                            return Err(ParseError { 
+                                span: name.start..name.end,
+                                 message: "Cannot redeclare const variable.".to_string() 
+                            })
+                        }
+                    }
+                    None => {}
+                }
                 self.resolve_expr(value)?;
                 Ok(())
             },
@@ -129,8 +140,6 @@ impl Resolver {
                 self.end_scope();
                 result
             },
-            
-            _ => Ok(()),
         }
     }
 
@@ -206,6 +215,15 @@ impl Resolver {
             scope.insert(name.lexeme.clone(), Binding { ready: false, kind: VarKind::Mut, var_type: VarType::Str, } );
         }                                                                       // kind and type are simple plugs
         Ok(())
+    }
+
+    fn lookup_binding(&self, name: &Token) -> Option<&Binding> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(b) = scope.get(&name.lexeme) {
+                return Some(b)
+            }
+        }
+        None
     }
 
     fn define(&mut self, name: &Token) {

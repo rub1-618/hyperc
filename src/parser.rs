@@ -132,29 +132,29 @@ impl Parser {
     
     fn primary(&mut self) -> Result<Expr, ParseError> {
         if self.match_token(&[TokenType::False]) {
-            return Ok(Expr::Literal { value: LiteralValue::Bool(false)})
+            return Ok(Expr::Literal { value: LiteralValue::Bool(false), span: self.previous().start..self.previous().end })
         }
         if self.match_token(&[TokenType::True]) {
-            return Ok(Expr::Literal { value: LiteralValue::Bool(true)})
+            return Ok(Expr::Literal { value: LiteralValue::Bool(true), span: self.previous().start..self.previous().end })
         }
         if self.match_token(&[TokenType::Null]) {
-            return Ok(Expr::Literal { value: LiteralValue::Null})
+            return Ok(Expr::Literal { value: LiteralValue::Null, span: self.previous().start..self.previous().end })
         }
 
         if self.match_token(&[TokenType::StringLit]) {
-            return Ok(Expr::Literal { value: LiteralValue::String(self.previous().lexeme.clone()) })
+            return Ok(Expr::Literal { value: LiteralValue::String(self.previous().lexeme.clone()), span: self.previous().start..self.previous().end })
         }
 
         if self.match_token(&[TokenType::CharLit]) {
-            return Ok(Expr::Literal { value: LiteralValue::Char(self.previous().lexeme.chars().nth(1).unwrap())})
+            return Ok(Expr::Literal { value: LiteralValue::Char(self.previous().lexeme.chars().nth(1).unwrap()), span: self.previous().start..self.previous().end })
         }
 
         if self.match_token(&[TokenType::IntLit]) {
-            return Ok(Expr::Literal { value: LiteralValue::Int(self.previous().lexeme.parse::<i64>().unwrap()) })
+            return Ok(Expr::Literal { value: LiteralValue::Int(self.previous().lexeme.parse::<i64>().unwrap()), span: self.previous().start..self.previous().end })
         }
 
         if self.match_token(&[TokenType::FloatLit]) {
-            return Ok(Expr::Literal { value: LiteralValue::Float(self.previous().lexeme.parse::<f64>().unwrap()) })
+            return Ok(Expr::Literal { value: LiteralValue::Float(self.previous().lexeme.parse::<f64>().unwrap()), span: self.previous().start..self.previous().end })
         }
 
         if self.match_token(&[TokenType::Identifier]) {
@@ -271,7 +271,7 @@ impl Parser {
 
         let var_type = self.parse_type()?;
         
-        let mut value: Expr = Expr::Literal { value: LiteralValue::Null };
+        let mut value: Expr = Expr::Literal { value: LiteralValue::Null, span: self.previous().start..self.previous().end  };
         if self.match_token(&[TokenType::Equal]) {
             value = self.expression()?; 
         }

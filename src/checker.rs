@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::ops::Range;
 use crate::token::{TokenType, Token};
-use crate::ast::{Expr, Stmt, LiteralValue, VarKind, VarType};
+use crate::ast::{Expr, Stmt, LiteralValue, VarType};
 use crate::error::TypeError;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -11,7 +12,7 @@ pub enum Type {
     Char,
     Bool,
     Unit,
-    Error,
+    Error, // todo
 }
 
 #[derive(Debug, Clone)]
@@ -145,7 +146,7 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Call { callee, arguments, paren } => {
+            Expr::Call { callee, arguments, paren: _ } => {
                 match callee.as_ref() {
                     Expr::Variable { name} => {
                         
@@ -186,7 +187,7 @@ impl TypeChecker {
                     
             
 
-            Expr::Literal { value } => {
+            Expr::Literal { value, .. } => {
                 match value {
                     LiteralValue::Int(_) => Ok(Type::Int),
                     LiteralValue::Float(_) => Ok(Type::Float),
@@ -210,8 +211,6 @@ impl TypeChecker {
                         }
                 }
             }
-
-            _ => todo!()
         }
     }
 
@@ -278,6 +277,7 @@ impl TypeChecker {
 
             Stmt::If { params, then_branch, else_branch } => {
                 let params_expected = Type::Bool;
+                let span = Self::expr_span(&params);
                 let params = self.infer(params)?;
                 if params_expected == params {
                     self.check_stmt(then_branch)?;
@@ -286,7 +286,7 @@ impl TypeChecker {
                     }
                 } else {
                     return Err(TypeError { 
-                                span: 0..0, // todo: span for statements
+                                span,
                                 message: "Invalid if statement.".to_string() 
                             })
                         }
@@ -296,12 +296,13 @@ impl TypeChecker {
 
             Stmt::While { conditions, statements } => {
                 let cond_expected = Type::Bool;
+                let span = Self::expr_span(&conditions);
                 let condition = self.infer(conditions)?;
                 if cond_expected == condition {
                     self.check_stmt(statements)?;
                 } else {
                     return Err(TypeError { 
-                                span: 0..0, // todo: span for statements
+                                span,
                                 message: "Invalid while statement.".to_string() 
                             })
                         }
@@ -315,10 +316,11 @@ impl TypeChecker {
                     if let Some(init) = initializer { self.check_stmt(init)?; }
                     let cond_expected = Type::Bool;
                     if let Some(cond) = condition {
+                        let span = Self::expr_span(&cond);
                         let ct = self.infer(cond)?;
                         if ct != cond_expected {
                             return Err(TypeError { 
-                                span: 0..0, // todo: span for statements
+                                span, // todo: span for statements
                                 message: "For conditions must be boolean.".to_string() 
                             })
                         }
@@ -334,27 +336,32 @@ impl TypeChecker {
             }
 
             Stmt::Return { value } => {
-                    let ret_type = match value {
-                        Some(v) => self.infer(v)?,
-                        None => Type::Unit,
-                    };
+                let span = match value {
+                    Some(sp) => Self::expr_span(sp),
+                    None => 0..0,
+                };
 
-                    match self.current_return {
-                        Some(expected) => {
-                            if expected == ret_type {
-                                return Ok(())
-                            } else {
-                                return Err(TypeError { 
-                                    span: 0..0,
-                                    message: "Mismatched return type.".to_string() 
-                                })
-                            }
-                        }
-                        None => return Err(TypeError { 
-                                span: 0..0,
-                                message: "Return should be inside the function.".to_string() 
+                let ret_type = match value {
+                    Some(v) => {self.infer(v)?},
+                    None => Type::Unit,
+                };
+
+                match self.current_return {
+                    Some(expected) => {
+                        if expected == ret_type {
+                            return Ok(())
+                        } else {
+                            return Err(TypeError { 
+                                span,
+                                message: "Mismatched return type.".to_string() 
                             })
                         }
+                    }
+                    None => return Err(TypeError { 
+                            span,
+                            message: "Return should be inside the function.".to_string() 
+                        })
+                }
             }
 
             Stmt::Function { name, params, statements , return_type} => {
@@ -392,8 +399,6 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-
-            _ => Ok(())
         }
     }
 
@@ -402,6 +407,17 @@ impl TypeChecker {
             scope.insert(name.lexeme.clone(), ty );
         }
         Ok(())
+    }
+
+    fn expr_span(expr: &Expr) -> Range<usize> {
+        match expr {
+            Expr::Binary { operator, .. } => operator.start..operator.end,
+            Expr::Unary { operator, .. } => operator.start..operator.end,
+            Expr::Call { paren, .. } => paren.start..paren.end,
+            Expr::Variable { name } => name.start..name.end,
+            Expr::Literal { span, .. } => span.clone(),
+            Expr::Grouping { expr } => Self::expr_span(expr),
+        }
     }
 
     fn lookup(&self, name: &str) -> Option<Type> {
