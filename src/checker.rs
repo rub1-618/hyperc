@@ -3,6 +3,7 @@ use std::ops::Range;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, Stmt, LiteralValue, VarType};
 use crate::error::TypeError;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Type {
@@ -13,6 +14,20 @@ pub enum Type {
     Bool,
     Unit,
     Error, // todo
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Type::Int => write!(f, "int"),
+            Type::Float => write!(f, "float"),
+            Type::Str => write!(f, "str"),
+            Type::Char => write!(f, "char"),
+            Type::Bool => write!(f, "bool"),
+            Type::Unit => write!(f, "()"),
+            Type::Error => write!(f, "<error>")
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -60,7 +75,7 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "Arithmetic operands must be numeric.".to_string() 
+                                message: format!("Arithmetic operands must be numeric, got {} and {}.", lt, rt)
                             })
                         }
                       },
@@ -72,7 +87,7 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "Invalid comparison operands.".to_string() 
+                                message: format!("Comparison operands must be numeric, got {} and {}.", lt, rt) 
                             })
                         }
                       },
@@ -85,7 +100,7 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "Invalid comparison operands.".to_string() 
+                                message: format!("Comparison operands must be numeric, got {} and {}.", lt, rt) 
                             })
                         }
                     },
@@ -96,7 +111,7 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "Logical operands must be booleans.".to_string() 
+                                message: format!("Logical operands must be both booleans, got {} and {}.", lt, rt) 
                             })
                         }
                     },
@@ -121,7 +136,7 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "Unsupported unary operand.".to_string() 
+                                message: format!("Expected mathematical operand for '-', got {}.", right)
                             })
                         }
                     },
@@ -132,7 +147,7 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "For '!' operator only boolean operadns are supported.".to_string() 
+                                message: format!("Expected boolean operand for '!', got {}.", right) 
                             })
                         }
                     },
@@ -239,7 +254,7 @@ impl TypeChecker {
                 } else {
                     return Err(TypeError { 
                                 span: name.start..name.end, 
-                                message: "Mismatched type.".to_string() 
+                                message: format!("Mismatched type. Got: {}, expected: {}.", ty, expected)
                             })
                 }
             }
@@ -259,7 +274,7 @@ impl TypeChecker {
 
                 return Err(TypeError { 
                                 span: name.start..name.end, 
-                                message: "Mismatched type.".to_string() 
+                                message: format!("Mismatched type. Got: {}, expected: {}.", ty, expected)
                             })
             }
 
@@ -287,7 +302,7 @@ impl TypeChecker {
                 } else {
                     return Err(TypeError { 
                                 span,
-                                message: "Invalid if statement.".to_string() 
+                                message: format!("If condition must be boolean, got {}.", params), 
                             })
                         }
 
@@ -303,7 +318,7 @@ impl TypeChecker {
                 } else {
                     return Err(TypeError { 
                                 span,
-                                message: "Invalid while statement.".to_string() 
+                                message: format!("While condition must be boolean, got {}.", condition) 
                             })
                         }
 
@@ -320,8 +335,8 @@ impl TypeChecker {
                         let ct = self.infer(cond)?;
                         if ct != cond_expected {
                             return Err(TypeError { 
-                                span, // todo: span for statements
-                                message: "For conditions must be boolean.".to_string() 
+                                span,
+                                message: format!("Invalid for condition. Got: {}, expected: {}.", ct, cond_expected)
                             })
                         }
                     }
@@ -353,7 +368,7 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span,
-                                message: "Mismatched return type.".to_string() 
+                                message: format!("Mismatched return type. Got: {}, expected: {}.", ret_type, expected)
                             })
                         }
                     }
@@ -493,5 +508,18 @@ mod tests {
     #[test]
     fn test_source_bool_ok() {
         assert!(check_source("let const x: bool = true;").is_ok())
+    }
+
+    #[test]
+    fn test_range() {
+        let result = check_source("if (5) { let mut x: int = 1; }");
+        match result {
+            Err(e) => {
+                assert!(e.span != (0..0));
+                assert!(e.span.start > 0);
+                assert!(e.span.end > 0);
+            }
+            Ok(()) => panic!("Expected error")
+        }
     }
 }
