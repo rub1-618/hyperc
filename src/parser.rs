@@ -30,13 +30,41 @@ impl Parser {
     // -- recrusive descent --
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        return self.equality();
+        return self.logicor();
+    }
+
+    // or
+
+    fn logicor(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.logicand()?;
+
+        while self.match_token(&[TokenType::Or]) {
+            let operator = self.previous().clone();
+            let right = self.logicand()?;
+            expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right), };
+        }
+    
+        Ok(expr)    
+    }
+
+    // and
+
+    fn logicand(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.equality()?;
+
+        while self.match_token(&[TokenType::And]) {
+            let operator = self.previous().clone();
+            let right = self.equality()?;
+            expr = Expr::Binary { left: Box::new(expr), operator, right: Box::new(right), };
+        }
+    
+        Ok(expr)    
     }
 
     // equality
 
     fn equality(&mut self) -> Result<Expr, ParseError> {
-        let mut expr: Expr  = self.comparison()?;
+        let mut expr: Expr = self.comparison()?;
 
         while self.match_token(&[TokenType::BangEqual, TokenType::EqualEqual]) {
             let operator = self.previous().clone();
