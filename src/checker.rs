@@ -480,9 +480,24 @@ mod tests {
         _infer.check_stmt( &stmt[0])
     }
 
+    fn check_all_source(src: &str) -> Result<(), TypeError> {
+        let mut lexer = Lexer::new(src  .to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());        
+        let stmt = _parser.parse().unwrap();
+        let mut _infer = TypeChecker::new();
+        _infer.check(&stmt)?;
+        Ok(())
+    }
+
     #[test]
     fn test_int() {
         assert_eq!(infer_source("1 + 2;").unwrap(), Type::Int )
+    }
+
+    #[test]
+    fn test_unar_int() {
+        assert_eq!(infer_source("-4;").unwrap(), Type::Int )
     }
 
     #[test]
@@ -491,8 +506,63 @@ mod tests {
     }
 
     #[test]
+    fn test_unar_bool() {
+        assert_eq!(infer_source("!true;").unwrap(), Type::Bool)
+    }
+
+    #[test]
+    fn test_unar_bool_err() {
+        assert!(infer_source("-true;").is_err())
+    }
+
+    #[test]
+    fn test_unar_str_err() {
+        assert!(infer_source("-\"string\";").is_err())
+    }
+
+    #[test]
+    fn test_comparison_less() {
+        assert_eq!(infer_source("1 < 2;").unwrap(), Type::Bool)
+    }
+
+    #[test]
+    fn test_comparison_greater() {
+        assert_eq!(infer_source("1 > 2;").unwrap(), Type::Bool)
+    }
+
+    #[test]
+    fn test_equality() {
+        assert_eq!(infer_source("2 == 2;").unwrap(), Type::Bool)
+    }
+
+    #[test]
+    fn test_bang_equality() {
+        assert_eq!(infer_source("1 != 2;").unwrap(), Type::Bool)
+    }
+
+    #[test]
     fn test_err() {
         assert!(infer_source("\"1.0\" + 2;").is_err())
+    }
+
+    #[test]
+    fn test_compar_err() {
+        assert!(infer_source("\"a\" > 2;").is_err())
+    }
+
+    #[test]
+    fn test_logicor() {
+        assert_eq!(infer_source("true || false;").unwrap(), Type::Bool)
+    }
+
+    #[test]
+    fn test_logicand() {
+        assert_eq!(infer_source("true && false;").unwrap(), Type::Bool)
+    }
+
+    #[test]
+    fn test_logic_err() {
+        assert!(infer_source("\"a\" && true;").is_err())
     }
 
     #[test]
@@ -501,13 +571,74 @@ mod tests {
     }
 
     #[test]
-    fn test_source_err() {
+    fn test_decl_err() {
         assert!(check_source("let mut x: int = \"hello\";").is_err())
     }
 
     #[test]
-    fn test_source_bool_ok() {
+    fn test_bool_decl() {
         assert!(check_source("let const x: bool = true;").is_ok())
+    }
+
+    #[test]
+    fn test_if_cond() {
+        assert!(check_source("if (true) {}").is_ok())
+    }
+
+    #[test]
+    fn test_if_cond_err() {
+        assert!(check_source("if (5) {}").is_err())
+    }
+
+    #[test]
+    fn test_while_cond() {
+        assert!(check_source("while (true) {}").is_ok())
+    }
+
+    #[test]
+    fn test_while_cond_err() {
+        assert!(check_source("while (5) {}").is_err())
+    }
+
+    #[test]
+    fn test_decl_assign() {
+        assert!(check_all_source("let mut x: bool = true; x = false;").is_ok())
+    }
+
+    #[test]
+    fn test_func_ret() {
+        assert!(check_source("func foo() -> int { return 5; }").is_ok())
+    }
+
+    #[test]
+    fn test_func_ret_err() {
+        assert!(check_source("func foo() -> int { return \"5\"; }").is_err())
+    }
+
+    #[test]
+    fn test_class() {
+        assert!(check_source("class Dog {}").is_ok())
+    }
+
+    #[test]
+    fn test_class_err() {
+        assert!(check_source("class Dog { func foo () -> int { return \"x\"; } }").is_err())
+    }
+
+
+    #[test]
+    fn test_call_arg_num_err() {
+        assert!(check_all_source(" func foo (x: int, y: int, z: bool) { return x; } foo(5, 7); ").is_err())
+    }
+
+    #[test]
+    fn test_block_in_block() {
+        assert!(check_all_source(" { let mut x: int = 3; { let const y: int = x; } } ").is_ok())
+    }
+
+    #[test]
+    fn test_block_env_err() {
+        assert!(check_all_source(" { let mut x: int = 3; } let const y: int = x; ").is_err())
     }
 
     #[test]

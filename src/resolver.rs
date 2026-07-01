@@ -398,4 +398,14 @@ use crate::resolver;
         }
     }
 
+    #[test]
+    fn test_const_assign_err() {
+        let mut lexer = Lexer::new("let const x: bool = true; x = false;".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        assert!(_resolver.resolve(&stmts).is_err() );
+    }
+
 }
