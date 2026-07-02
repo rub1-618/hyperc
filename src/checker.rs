@@ -64,8 +64,7 @@ impl TypeChecker {
                 let rt = self.infer(right)?;
                 match operator.token_type {
                     TokenType::Plus | TokenType::Minus |
-                     TokenType::Star | TokenType::Slash |
-                      TokenType::Percent => {
+                     TokenType::Star | TokenType::Slash => {
                         if (lt == Type::Int || lt == Type::Float) && (rt == Type::Int || rt == Type::Float) {
                              if lt == Type::Float || rt == Type::Float {
                                 Ok(Type::Float)
@@ -79,6 +78,17 @@ impl TypeChecker {
                             })
                         }
                       },
+
+                    TokenType::Percent => {
+                        if lt == Type::Int && rt == Type::Int {
+                            Ok(Type::Int)
+                        } else {
+                            return Err(TypeError { 
+                                span: operator.start..operator.end, 
+                                message: format!("Modulo operands must be both int, got {} and {}.", lt, rt)
+                            })
+                        }
+                    }
 
                     TokenType::Less | TokenType::LessEqual |
                      TokenType::Greater | TokenType::GreaterEqual => {

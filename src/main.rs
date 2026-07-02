@@ -2,6 +2,9 @@ use std::env;
 use std::io::{self, BufRead, Write};
 use std::fs;
 
+use inkwell::context::Context;
+use codegen::Codegen;
+
 mod lexer;
 mod token;
 mod parser;
@@ -9,6 +12,7 @@ mod ast;
 mod error;
 mod resolver;
 mod checker;
+mod codegen;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -17,7 +21,7 @@ fn main() {
         std::process::exit(64);
     }
     else if args.len() == 2 {
-        run_file (&args[1])
+        run_file(&args[1])
     }
     else {
         run_prompt();
@@ -36,7 +40,12 @@ fn run(source: &str) {
                         Ok(()) => {
                             let mut _checker = checker::TypeChecker::new();
                             match _checker.check(&stmts) {
-                                Ok(()) => println!("{:?}", stmts),
+                                Ok(()) => {
+                                    println!("{:?}", &stmts);
+                                    let context = Context::create();
+                                    let codegen = Codegen::new(&context);
+                                    codegen.compile(&stmts);
+                                },
                                 Err(e) => error::report_type(source, &e),
                             }
                         },
