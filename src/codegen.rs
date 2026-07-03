@@ -1,9 +1,10 @@
 use core::panic;
-use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, checker::Type, token::TokenType};
+use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, checker::Type, resolver, token::TokenType};
 use std::{ops::Deref, path::Path};
 use std::collections::HashMap;
+use crate::error::CompileError;
 use inkwell::{
-    OptimizationLevel, builder::Builder, context::Context, module::Module, targets::{
+    OptimizationLevel, builder::{Builder, BuilderError}, context::Context, module::Module, targets::{
         CodeModel, 
         FileType, 
         InitializationConfig, 
@@ -19,6 +20,15 @@ use inkwell::{
 };
 
 use crate::token::Token;
+
+impl From<BuilderError> for CompileError {
+    fn from(err: BuilderError) -> Self {
+        return CompileError{
+            span: 0..0,
+            message: err.to_string(),
+        }
+    }
+}
 
 pub struct Codegen<'ctx> {
     context: &'ctx Context,
@@ -36,58 +46,65 @@ impl <'ctx>Codegen<'ctx> {
         Codegen { context, module, builder, variables }
     }
 
-    pub fn compile(&mut self, stmts: &[Stmt]) {
+    pub fn compile(&mut self, stmts: &[Stmt]) -> Result<(), CompileError> {
         for stmt in stmts {
-            self.compile_stmt(stmt);
+            self.compile_stmt(stmt)?;
         }
         let result = self.module.print_to_string().to_string();
         println!("{}", result);
         match self.module.verify() {
             Ok(()) => {}
             Err(e) => {
-                panic!("Error: {}", &e)
+                return Err(CompileError { 
+                    span: 0..0, 
+                    message: e.to_string() 
+                });
             }
         }
-        self.emit_obj();
+        self.emit_obj()?;
+        Ok(())
     }
 
-    fn compile_expr(&self, expr: &Expr) -> BasicValueEnum<'ctx> {
+    fn compile_expr(&self, expr: &Expr) -> Result<BasicValueEnum<'ctx>, CompileError> {
         match expr {
             Expr::Literal { value, .. } => {
                 match value {
                     LiteralValue::Int(n) => {
                         let i64_type = self.context.i64_type();
                         let value_i64 = *n as u64;
-                        i64_type.const_int(value_i64, true).into()
+                        Ok(i64_type.const_int(value_i64, true).into())
                     }
                     LiteralValue::Float(f) => {
                         let f64_type = self.context.f64_type();
-                        f64_type.const_float(*f).into()
+                        Ok(f64_type.const_float(*f).into())
                     }
                     // todo LiteralValue::String(s) => {}
                     // todo LiteralValue::Char(c) => {}
                     LiteralValue::Bool(b) => {
                         let bool_type = self.context.bool_type();
                         let value_bool = *b as u64;
-                        bool_type.const_int(value_bool, false).into()
+                        Ok(bool_type.const_int(value_bool, false).into())
                     }
                     // todo LiteralValue::Null() => {}
-                    _ => todo!()
+                    _ => return Err(CompileError { 
+                        span: 0..0, 
+                        message: format!("Unsupported literal: {:?}", value) 
+                    })
                 }
             },
 
             Expr::Binary { left, operator, right } => {
-                let mut lhs = self.compile_expr(left);
-                let mut rhs = self.compile_expr(right);
+                let mut lhs = self.compile_expr(left)?;
+                let mut rhs = self.compile_expr(right)?;
                 if lhs.is_int_value() && rhs.is_int_value() {
-                    self.compile_int_binary(lhs.into_int_value(), operator, rhs.into_int_value()).into()
+                    Ok(self.compile_int_binary(lhs.into_int_value(), operator, rhs.into_int_value())?.into())
                 } else {
                     if lhs.is_int_value() {
                         lhs = self.builder.build_signed_int_to_float(
                             lhs.into_int_value(), 
                             self.context.f64_type(), 
                             "casttmp"
-                        ).unwrap().into();
+                        )?.into();
                     }
 
                     if rhs.is_int_value() {
@@ -95,83 +112,100 @@ impl <'ctx>Codegen<'ctx> {
                             rhs.into_int_value(), 
                             self.context.f64_type(), 
                             "casttmp"
-                        ).unwrap().into();
+                        )?.into();
                     }
 
-                    self.compile_float_binary(lhs.into_float_value(), operator, rhs.into_float_value()).into()
+                    Ok(self.compile_float_binary(lhs.into_float_value(), operator, rhs.into_float_value())?.into())
                 }
             }
 
             Expr::Variable { name } => {
-                let (ptr, ty) = *self.variables.get(&name.lexeme).unwrap();
-                self.builder.build_load(ty, ptr, &name.lexeme).unwrap()
+                let (ptr, ty) = *self.variables.get(&name.lexeme).ok_or_else(|| CompileError{
+                    span: name.start..name.end,
+                    message: format!("Variable undefined: {:?}.", &name.lexeme)
+                })?;
+                Ok(self.builder.build_load(ty, ptr, &name.lexeme)?)
             }
 
-            _ => todo!(),
+            _ => {return Err(CompileError { 
+                    span: 0..0, 
+                    message: format!("Unsupported expression type: {:?}.", expr) 
+                });
+            }
         
         }
     }
 
-    fn compile_stmt(&mut self, stmt: &Stmt) {
+    fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), CompileError> {
         match stmt {
             
             Stmt::Expression { value } => {
-                self.compile_expr(value);
+                self.compile_expr(value)?;
+                Ok(())
             }
 
             Stmt::Let { name, value, var_type, .. } => {
-                let ty = self.var_to_llvm(var_type);
-                let ptr = self.builder.build_alloca(ty, &name.lexeme).unwrap();
-                let result = self.compile_expr(value);
-                self.builder.build_store(ptr, result).unwrap();
+                let ty = self.var_to_llvm(var_type)?;
+                let ptr = self.builder.build_alloca(ty, &name.lexeme)?;
+                let result = self.compile_expr(value)?;
+                self.builder.build_store(ptr, result)?;
                 self.variables.insert(name.lexeme.clone(), (ptr, ty));
+                Ok(())
             }
 
             Stmt::Assign { name, value } => {
-                let (ptr, ..) = *self.variables.get(&name.lexeme).unwrap();
-                let result = self.compile_expr(value);
-                self.builder.build_store(ptr, result).unwrap();
+                let (ptr, ..) = *self.variables.get(&name.lexeme).ok_or_else(|| CompileError{
+                    span: name.start..name.end,
+                    message: "Failed getting a pointer for assign statement.".to_string()
+                })?;
+                let result = self.compile_expr(value)?;
+                self.builder.build_store(ptr, result)?;
+                Ok(())
             }
 
             Stmt::Block { statements } => {
                 for stmt in statements {
-                    self.compile_stmt(stmt);
+                    self.compile_stmt(stmt)?;
                 }
+                Ok(())
             }
 
             Stmt::Return { value } => {
                 match value {
                     Some(v) => {
-                        let result = self.compile_expr(v);
-                        self.builder.build_return(Some(&result)).unwrap();
+                        let result = self.compile_expr(v)?;
+                        self.builder.build_return(Some(&result))?;
                     }
                     None => {
-                        self.builder.build_return(None).unwrap();
+                        self.builder.build_return(None)?;
                     }
                 }
+                Ok(())
             }
 
             Stmt::Function { name, params, statements, return_type } => {
-                self.compile_function(name, params, statements, return_type);
+                self.compile_function(name, params, statements, return_type)?;
+                Ok(())
             }
 
-
-
-            _ => todo!()
+            _ => {Err(CompileError { 
+                span: 0..0, 
+                message: format!("Unsupported statement type: {:?}.", stmt)  
+            })}
         }
     }
 
-    fn compile_function(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, return_type: &Option<VarType> ) {
+    fn compile_function(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, return_type: &Option<VarType> ) -> Result<(), CompileError> {
         let og_block = self.builder.get_insert_block();
         let og_variables = self.variables.clone();
         let mut param_types: Vec<BasicMetadataTypeEnum> = vec![];
         for (_, var_type) in params {
-            param_types.push(self.var_to_llvm(var_type).into());
+            param_types.push(self.var_to_llvm(var_type)?.into());
         }
 
         let fn_type = match return_type {
             Some(r) => {
-                 self.var_to_llvm( r).fn_type(&param_types, false)
+                 self.var_to_llvm( r)?.fn_type(&param_types, false)
             }
             None => {
                 self.context.void_type().fn_type(&param_types, false)
@@ -183,78 +217,94 @@ impl <'ctx>Codegen<'ctx> {
         self.builder.position_at_end(basic_block);
         self.variables = HashMap::new();
 
-        self.compile_stmt(stmts); // !
+        self.compile_stmt(stmts)?;
 
-        let block= self.builder.get_insert_block().unwrap();
+        let block= self.builder.get_insert_block().ok_or_else(|| CompileError{
+            span: 0..0,
+            message: "Builder is not positioned.".to_string()
+        })?;
         let terminator = block.get_terminator();
         if return_type.is_none() && terminator.is_none() {
-            self.builder.build_return(None).unwrap();
+            self.builder.build_return(None)?;
         }
         self.variables = og_variables;
         if let Some(b) = og_block {
             self.builder.position_at_end(b);
         };
+        Ok(())
     }
 
-    fn compile_int_binary(&self, lhs: IntValue<'ctx>, op: &Token, rhs: IntValue<'ctx>) -> IntValue<'ctx> {
+    fn compile_int_binary(&self, lhs: IntValue<'ctx>, op: &Token, rhs: IntValue<'ctx>) -> Result<IntValue<'ctx>, CompileError> {
         match op.token_type {
             
             TokenType::Plus => {
-                self.builder.build_int_add(lhs, rhs, "add").unwrap()
+                Ok(self.builder.build_int_add(lhs, rhs, "add")?)
             }
 
             TokenType::Minus => {
-                self.builder.build_int_sub(lhs, rhs, "sub").unwrap()
+                Ok(self.builder.build_int_sub(lhs, rhs, "sub")?)
             }
 
             TokenType::Star => {
-                self.builder.build_int_mul(lhs, rhs, "mul").unwrap()
+                Ok(self.builder.build_int_mul(lhs, rhs, "mul")?)
             }
 
             TokenType::Slash => {
-                self.builder.build_int_signed_div(lhs, rhs, "div").unwrap()
+                Ok(self.builder.build_int_signed_div(lhs, rhs, "div")?)
             }
 
             TokenType::Percent => {
-                self.builder.build_int_signed_rem(lhs, rhs, "rem").unwrap()
+                Ok(self.builder.build_int_signed_rem(lhs, rhs, "rem")?)
             }
 
-            _ => todo!()
+            _ => return Err(CompileError { 
+                        span: op.start..op.end, 
+                        message: "Unsupported int binary expression.".to_string() 
+                    })
         }
     }
 
-    fn compile_float_binary(&self, lhs: FloatValue<'ctx>, op: &Token, rhs: FloatValue<'ctx>) -> FloatValue<'ctx> {
+    fn compile_float_binary(&self, lhs: FloatValue<'ctx>, op: &Token, rhs: FloatValue<'ctx>) -> Result<FloatValue<'ctx>, CompileError> {
         match op.token_type {
             
             TokenType::Plus => {
-                self.builder.build_float_add(lhs, rhs, "add").unwrap()
+                Ok(self.builder.build_float_add(lhs, rhs, "add")?)
             }
 
             TokenType::Minus => {
-                self.builder.build_float_sub(lhs, rhs, "sub").unwrap()
+                Ok(self.builder.build_float_sub(lhs, rhs, "sub")?)
             }
 
             TokenType::Star => {
-                self.builder.build_float_mul(lhs, rhs, "mul").unwrap()
+                Ok(self.builder.build_float_mul(lhs, rhs, "mul")?)
             }
 
             TokenType::Slash => {
-                self.builder.build_float_div(lhs, rhs, "div").unwrap()
+                Ok(self.builder.build_float_div(lhs, rhs, "div")?)
             }
 
-            _ => todo!()
+            _ => return Err(CompileError { 
+                        span: op.start..op.end, 
+                        message: "Unsupported float binary expression.".to_string() 
+                    })
         }
     }
 
-    fn emit_obj(&self) {
+    fn emit_obj(&self) -> Result<(), CompileError> {
         match Target::initialize_native(&InitializationConfig::default()) {
             Ok(()) => {}
             Err(e) => {
-                panic!("Error: {}", &e);
+                return Err(CompileError { 
+                        span: 0..0, 
+                        message: e.to_string() 
+                    })
             }
         }
         let default_triple = TargetMachine::get_default_triple();
-        let target = Target::from_triple(&default_triple).unwrap();
+        let target = Target::from_triple(&default_triple).map_err(|e| CompileError{
+            span: 0..0,
+            message: e.to_string()
+        })?;
         let target_machine = target.create_target_machine(
             &default_triple, 
             "generic", 
@@ -262,25 +312,35 @@ impl <'ctx>Codegen<'ctx> {
             OptimizationLevel::None,
             RelocMode::Default,
             CodeModel::Default,
-        ).unwrap();
+        ).ok_or_else(|| CompileError{
+            span: 0..0,
+            message: "Target machine creation failed.".to_string()
+        })?;
         let path = Path::new("/mnt/work_ssd/work/hyperrust/target/out.o");
-        target_machine.write_to_file(&self.module, FileType::Object, path).unwrap();
+        target_machine.write_to_file(&self.module, FileType::Object, path).map_err(|e| CompileError{
+            span: 0..0,
+            message: e.to_string()
+        })?;
+        Ok(())
     }
 
-    fn var_to_llvm(&self, var_type: &VarType) -> BasicTypeEnum<'ctx> {
+    fn var_to_llvm(&self, var_type: &VarType) -> Result<BasicTypeEnum<'ctx>, CompileError> {
         match var_type {
             VarType::Int => {
-                self.context.i64_type().into()
+                Ok(self.context.i64_type().into())
             },
             VarType::Float => {
-                self.context.f64_type().into()
+                Ok(self.context.f64_type().into())
             },
             // todo VarType::Str => {},
             // todo VarType::Char => {},
             VarType::Bool => {
-                self.context.bool_type().into()
+                Ok(self.context.bool_type().into())
             },
-            _ => todo!()
+            _ => return Err(CompileError { 
+                span: 0..0, 
+                message: "VarType to LLVM conversion failed.".to_string() 
+            })
         }
     }
 }

@@ -19,6 +19,12 @@ pub struct TypeError {
      pub message: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct CompileError {
+     pub span:  Range<usize>,
+     pub message: String,
+}
+
 pub fn report_parse(source: &str, error: &ParseError) {
     Report::build(ReportKind::Error, ("input", error.span.clone()))
     .with_message(&error.message)
@@ -44,6 +50,18 @@ pub fn report_lex(source: &str, error: &LexerError) {
 }
 
 pub fn report_type(source: &str, error: &TypeError) {
+    Report::build(ReportKind::Error, ("input", error.span.clone()))
+    .with_message(&error.message)
+    .with_label(
+        Label::new(("input", error.span.clone()))
+        .with_message(&error.message)
+    )
+    .finish()
+    .print(("input", Source::from(source)))
+    .unwrap()
+}
+
+pub fn report_compile(source: &str, error: &CompileError) {
     Report::build(ReportKind::Error, ("input", error.span.clone()))
     .with_message(&error.message)
     .with_label(

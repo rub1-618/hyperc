@@ -44,7 +44,10 @@ fn run(source: &str) {
                                     println!("{:?}", &stmts);
                                     let context = Context::create();
                                     let mut codegen = Codegen::new(&context);
-                                    codegen.compile(&stmts);
+                                    match codegen.compile(&stmts) {
+                                        Ok(()) => {},
+                                        Err(e) => error::report_compile(source, &e),
+                                    }
                                 },
                                 Err(e) => error::report_type(source, &e),
                             }
