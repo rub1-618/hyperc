@@ -37,20 +37,9 @@ impl <'ctx>Codegen<'ctx> {
     }
 
     pub fn compile(&mut self, stmts: &[Stmt]) {
-        let i64_type = self.context.i64_type();
-        let fn_type = i64_type.fn_type(&[], false);
-        let function = self.module.add_function("main", fn_type, None);
-        let basic_block = self.context.append_basic_block(function, "entry");
-
-        self.builder.position_at_end(basic_block);
-
         for stmt in stmts {
             self.compile_stmt(stmt);
         }
-
-        let value = i64_type.const_int(0, false);
-        self.builder.build_return(Some(&value)).unwrap();
-
         let result = self.module.print_to_string().to_string();
         println!("{}", result);
         match self.module.verify() {
@@ -59,7 +48,6 @@ impl <'ctx>Codegen<'ctx> {
                 panic!("Error: {}", &e)
             }
         }
-
         self.emit_obj();
     }
 
@@ -151,6 +139,18 @@ impl <'ctx>Codegen<'ctx> {
                 }
             }
 
+            Stmt::Return { value } => {
+                match value {
+                    Some(v) => {
+                        let result = self.compile_expr(v);
+                        self.builder.build_return(Some(&result)).unwrap();
+                    }
+                    None => {
+                        self.builder.build_return(None).unwrap();
+                    }
+                }
+            }
+
             Stmt::Function { name, params, statements, return_type } => {
                 self.compile_function(name, params, statements, return_type);
             }
@@ -180,10 +180,16 @@ impl <'ctx>Codegen<'ctx> {
 
         let fn_val = self.module.add_function(&name.lexeme, fn_type, None);
         let basic_block = self.context.append_basic_block(fn_val, "entry");
-        self. builder.position_at_end(basic_block);
-
+        self.builder.position_at_end(basic_block);
         self.variables = HashMap::new();
-        self.compile_stmt(stmts);
+
+        self.compile_stmt(stmts); // !
+
+        let block= self.builder.get_insert_block().unwrap();
+        let terminator = block.get_terminator();
+        if return_type.is_none() && terminator.is_none() {
+            self.builder.build_return(None).unwrap();
+        }
         self.variables = og_variables;
         if let Some(b) = og_block {
             self.builder.position_at_end(b);

@@ -1,7 +1,10 @@
+use inkwell::attributes::AttributeLoc::Function;
+
 use crate::error::{ParseError};
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, LiteralValue, Stmt, VarKind, VarType};
 use std::collections::HashMap;
+use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct Binding {
@@ -24,10 +27,31 @@ impl Resolver {
 
     pub fn resolve(&mut self, statements: &[Stmt]) -> Result<(), ParseError>  {
         self.begin_scope();
+        let mut has_main = false;
         for statement in statements {
-            self.resolve_stmt(statement)?;
+            match statement {
+                Stmt::Function { name, .. } => {
+                    if &name.lexeme == "main" {
+                        has_main = true;
+                    }
+                    self.resolve_stmt(statement)?;
+                },
+                Stmt::Class { .. } => {
+                    self.resolve_stmt(statement)?;
+                },
+                _ => return Err(ParseError { 
+                    span: Self::stmt_span(statement),
+                    message: "Only functions and classes are top-level-supported.".to_string() 
+                })
+            }
         }
         self.end_scope();
+        if !has_main {
+            return Err(ParseError { 
+                    span: 0..0,
+                    message: "'main' function not found.".to_string() 
+                })
+        }
         Ok(())
     }
 
@@ -68,9 +92,12 @@ impl Resolver {
 
             Stmt::Block { statements } => {
                 self.begin_scope();
-                let result = self.resolve(&statements);
+                for stmt in statements {
+                    self.resolve_stmt(&stmt)?;
+                }
                 self.end_scope();
-                result
+
+                Ok(())
             },
 
             Stmt::If { params, then_branch, else_branch } => {
@@ -224,6 +251,26 @@ impl Resolver {
             }
         }
         None
+    }
+
+    fn stmt_span(stmt: &Stmt) -> Range<usize> {
+        match stmt {
+            Stmt::Let { name, .. } => {name.start..name.end},
+            Stmt::Assign { name, .. } => {name.start..name.end},
+            Stmt::Expression { value } => {Self::expr_span(value)},
+            _ => {0..0},
+        }
+    }
+
+    fn expr_span(expr: &Expr) -> Range<usize> {
+        match expr {
+            Expr::Binary { operator, .. } => operator.start..operator.end,
+            Expr::Unary { operator, .. } => operator.start..operator.end,
+            Expr::Call { paren, .. } => paren.start..paren.end,
+            Expr::Variable { name } => name.start..name.end,
+            Expr::Literal { span, .. } => span.clone(),
+            Expr::Grouping { expr } => Self::expr_span(expr),
+        }
     }
 
     fn define(&mut self, name: &Token) {

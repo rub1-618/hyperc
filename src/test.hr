@@ -1,1 +1,1 @@
-func foo() {  }
+let mut x: int = 5;
