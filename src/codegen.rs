@@ -1,14 +1,20 @@
 use core::panic;
-use crate::{ast::{Expr, LiteralValue, Stmt}, token::TokenType};
-use std::path::Path;
+use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, checker::Type, token::TokenType};
+use std::{ops::Deref, path::Path};
+use std::collections::HashMap;
 use inkwell::{
     OptimizationLevel, builder::Builder, context::Context, module::Module, targets::{
-        CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
-    }, 
-    values::{
+        CodeModel, 
+        FileType, 
+        InitializationConfig, 
+        RelocMode, 
+        Target, 
+        TargetMachine,
+    }, types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum}, values::{
         BasicValueEnum, 
-        IntValue, 
-        FloatValue
+        FloatValue, 
+        IntValue,
+        PointerValue,
     }
 };
 
@@ -18,6 +24,7 @@ pub struct Codegen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
+    variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>
 }
 
 impl <'ctx>Codegen<'ctx> {
@@ -25,10 +32,11 @@ impl <'ctx>Codegen<'ctx> {
     pub fn new(context: &'ctx Context) -> Self {
         let module = context.create_module("module");
         let builder = context.create_builder();
-        Codegen { context, module, builder }
+        let variables = HashMap::new();
+        Codegen { context, module, builder, variables }
     }
 
-    pub fn compile(&self, stmts: &[Stmt]) {
+    pub fn compile(&mut self, stmts: &[Stmt]) {
         let i64_type = self.context.i64_type();
         let fn_type = i64_type.fn_type(&[], false);
         let function = self.module.add_function("main", fn_type, None);
@@ -106,18 +114,80 @@ impl <'ctx>Codegen<'ctx> {
                 }
             }
 
+            Expr::Variable { name } => {
+                let (ptr, ty) = *self.variables.get(&name.lexeme).unwrap();
+                self.builder.build_load(ty, ptr, &name.lexeme).unwrap()
+            }
+
             _ => todo!(),
         
         }
     }
 
-    fn compile_stmt(&self, stmt: &Stmt) {
+    fn compile_stmt(&mut self, stmt: &Stmt) {
         match stmt {
+            
             Stmt::Expression { value } => {
                 self.compile_expr(value);
             }
+
+            Stmt::Let { name, value, var_type, .. } => {
+                let ty = self.var_to_llvm(var_type);
+                let ptr = self.builder.build_alloca(ty, &name.lexeme).unwrap();
+                let result = self.compile_expr(value);
+                self.builder.build_store(ptr, result).unwrap();
+                self.variables.insert(name.lexeme.clone(), (ptr, ty));
+            }
+
+            Stmt::Assign { name, value } => {
+                let (ptr, ..) = *self.variables.get(&name.lexeme).unwrap();
+                let result = self.compile_expr(value);
+                self.builder.build_store(ptr, result).unwrap();
+            }
+
+            Stmt::Block { statements } => {
+                for stmt in statements {
+                    self.compile_stmt(stmt);
+                }
+            }
+
+            Stmt::Function { name, params, statements, return_type } => {
+                self.compile_function(name, params, statements, return_type);
+            }
+
+
+
             _ => todo!()
         }
+    }
+
+    fn compile_function(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, return_type: &Option<VarType> ) {
+        let og_block = self.builder.get_insert_block();
+        let og_variables = self.variables.clone();
+        let mut param_types: Vec<BasicMetadataTypeEnum> = vec![];
+        for (_, var_type) in params {
+            param_types.push(self.var_to_llvm(var_type).into());
+        }
+
+        let fn_type = match return_type {
+            Some(r) => {
+                 self.var_to_llvm( r).fn_type(&param_types, false)
+            }
+            None => {
+                self.context.void_type().fn_type(&param_types, false)
+            }
+        };
+
+        let fn_val = self.module.add_function(&name.lexeme, fn_type, None);
+        let basic_block = self.context.append_basic_block(fn_val, "entry");
+        self. builder.position_at_end(basic_block);
+
+        self.variables = HashMap::new();
+        self.compile_stmt(stmts);
+        self.variables = og_variables;
+        if let Some(b) = og_block {
+            self.builder.position_at_end(b);
+        };
     }
 
     fn compile_int_binary(&self, lhs: IntValue<'ctx>, op: &Token, rhs: IntValue<'ctx>) -> IntValue<'ctx> {
@@ -189,5 +259,22 @@ impl <'ctx>Codegen<'ctx> {
         ).unwrap();
         let path = Path::new("/mnt/work_ssd/work/hyperrust/target/out.o");
         target_machine.write_to_file(&self.module, FileType::Object, path).unwrap();
+    }
+
+    fn var_to_llvm(&self, var_type: &VarType) -> BasicTypeEnum<'ctx> {
+        match var_type {
+            VarType::Int => {
+                self.context.i64_type().into()
+            },
+            VarType::Float => {
+                self.context.f64_type().into()
+            },
+            // todo VarType::Str => {},
+            // todo VarType::Char => {},
+            VarType::Bool => {
+                self.context.bool_type().into()
+            },
+            _ => todo!()
+        }
     }
 }

@@ -209,8 +209,6 @@ impl TypeChecker {
                     })
                 }
             }
-                    
-            
 
             Expr::Literal { value, .. } => {
                 match value {
@@ -360,6 +358,7 @@ impl TypeChecker {
                 result
             }
 
+            // todo missing return analysis
             Stmt::Return { value } => {
                 let span = match value {
                     Some(sp) => Self::expr_span(sp),
@@ -409,6 +408,17 @@ impl TypeChecker {
                         self.declare(&param.0, Self::vartype_to_type(&param.1))?;
                     }
                     self.check_stmt(statements)?;
+                    match return_type {
+                        Some(_) => {
+                            if !Self::always_return(statements) {
+                                return Err(TypeError { 
+                                    span: name.start..name.end,
+                                    message: "Not all paths return.".to_string()
+                                })
+                            }
+                        }
+                        None => ()
+                    }
 
                     Ok(())
                 } )(); 
@@ -432,6 +442,33 @@ impl TypeChecker {
             scope.insert(name.lexeme.clone(), ty );
         }
         Ok(())
+    }
+
+    fn always_return(stmt: &Stmt) -> bool {
+        match stmt {
+            
+            Stmt::Return { .. } => {
+                true
+            }
+
+            Stmt::Block { statements } => {
+                let check = statements.iter().any(|s: &Stmt| Self::always_return(s));
+                if check {return true;} else {return false;}
+            }
+
+            Stmt::If { then_branch, else_branch , ..} => {
+                match else_branch {
+                    Some(b) => {
+                        if Self::always_return(then_branch) && Self::always_return(b) {
+                            true
+                        } else { false }
+                    }
+                    None => {false}
+                }
+            }
+
+            _ => false
+        }
     }
 
     fn expr_span(expr: &Expr) -> Range<usize> {
