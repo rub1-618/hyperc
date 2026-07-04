@@ -120,7 +120,7 @@ impl Resolver {
                 let result =( || {
                     if let Some(init) = initializer { self.resolve_stmt(init)?; }
                     if let Some(cond) = condition { self.resolve_expr(cond)?; }
-                    if let Some(incr) = increment { self.resolve_expr(incr)?; }
+                    if let Some(incr) = increment { self.resolve_stmt(incr)?; }
                     self.resolve_stmt(statements)?;
                     Ok(())
                 })();

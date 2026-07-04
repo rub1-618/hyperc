@@ -349,7 +349,7 @@ impl TypeChecker {
                         }
                     }
                     if let Some(incr) = increment {
-                        self.infer(incr)?; 
+                        self.check_stmt(incr)?; 
                     }
                     self.check_stmt(statements)?;
                     Ok(())

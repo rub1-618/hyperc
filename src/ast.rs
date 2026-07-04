@@ -75,7 +75,7 @@ pub enum Stmt {
     For {
         initializer: Option<Box<Stmt>>,
         condition: Option<Box<Expr>>,
-        increment: Option<Box<Expr>>,
+        increment: Option<Box<Stmt>>,
         statements: Box<Stmt>,
     },
 

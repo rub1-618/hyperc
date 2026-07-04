@@ -311,13 +311,9 @@ impl Parser {
     // assignment
 
     fn assignment_statement(&mut self) -> Result<Stmt, ParseError> {
-        let name: Token = self.consume(TokenType::Identifier, "Existing variable name expected.")?;
-    
-        self.consume(TokenType::Equal, "Equality sign missing.")?;
-        let value: Expr = self.expression()?;
-        
+        let result = self.assignment_core()?;
         self.consume(TokenType::Semicolon, "Expected ';' after value.")?;
-        return Ok(Stmt::Assign {  name, value: Box::new( value ) })
+        Ok(result)
     }        
 
     // block
@@ -381,8 +377,10 @@ impl Parser {
 
         let increment = if self.check(TokenType::RightParen) {
             None
+        } else if self.peek().token_type == TokenType::Identifier {
+            Some(Box::new(self.assignment_core()?))
         } else {
-            Some(Box::new(self.expression()?))
+            Some(Box::new(self.statement()?))
         };
 
         self.consume(TokenType::RightParen, "Expected ')' in for statement.")?;
@@ -470,6 +468,14 @@ impl Parser {
     }
 
     // ! -- the guts and other details of the parser --
+
+    fn assignment_core(&mut self) -> Result<Stmt, ParseError> {
+        let name: Token = self.consume(TokenType::Identifier, "Existing variable name expected.")?;
+    
+        self.consume(TokenType::Equal, "Equality sign missing.")?;
+        let value: Expr = self.expression()?;
+        return Ok(Stmt::Assign {  name, value: Box::new( value ) })
+    }
 
     fn peek(&self) -> &Token {
         return &self.tokens[self.current];

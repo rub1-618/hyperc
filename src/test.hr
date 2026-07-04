@@ -1,7 +1,7 @@
-func main() -> int {
-    let mut x:int = 10;
-    if (5 > 3) {
-        x = 7;
-    } else { x = 11; }
-    return x;
+func main() -> float {
+    let mut z: float = 0.0;
+    for(let mut x: int = 10; x > 5; x = x - 1) {
+        z = z + 1;
+    }
+    return z;
 }

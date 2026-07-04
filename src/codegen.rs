@@ -247,6 +247,72 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(())
             }
 
+            Stmt::While { conditions, statements } => {
+                let og_block = self.builder.get_insert_block();
+                let fn_val = og_block.unwrap().get_parent().ok_or_else(|| CompileError {
+                    span: 0..0,
+                    message: "Cannot get the fn_val for while statement.".to_string()
+                })?;
+                let loop_cond = self.context.append_basic_block(fn_val, "loop_cond");
+                let loop_body = self.context.append_basic_block(fn_val, "loop_body");
+                let after = self.context.append_basic_block(fn_val, "after");
+
+                self.builder.build_unconditional_branch(loop_cond)?;
+                self.builder.position_at_end(loop_cond);
+                let c = self.compile_expr(conditions)?;
+
+                self.builder.build_conditional_branch(c.into_int_value(), loop_body, after)?;
+
+                self.compile_branch(loop_body, statements, loop_cond)?;
+                self.builder.position_at_end(after);
+
+                Ok(())
+            }
+
+            Stmt::For { initializer, condition, 
+            increment, statements } => {
+                let og_block = self.builder.get_insert_block();
+                let fn_val = og_block.unwrap().get_parent().ok_or_else(|| CompileError {
+                    span: 0..0,
+                    message: "Cannot get the fn_val for while statement.".to_string()
+                })?;
+                let loop_cond = self.context.append_basic_block(fn_val, "loop_cond");
+                let loop_body = self.context.append_basic_block(fn_val, "loop_body");
+                let after = self.context.append_basic_block(fn_val, "after");
+
+                if let Some(init) = initializer {
+                    self.compile_stmt(init)?;
+                }
+
+                self.builder.build_unconditional_branch(loop_cond)?;
+                self.builder.position_at_end(loop_cond);
+                
+                match condition {
+                    Some(cond) => { 
+                        let c = self.compile_expr(cond)?;
+                        self.builder.build_conditional_branch(c.into_int_value(), loop_body, after)?;
+                    }
+                    None => { self.builder.build_unconditional_branch(loop_body)?; }
+                }
+                self.builder.position_at_end(loop_body);
+                self.compile_stmt(statements)?;
+
+                let br = self.builder.get_insert_block().ok_or_else(|| CompileError{
+                    span: 0..0,
+                    message: "Builder is not positioned.".to_string()
+                })?;
+                let terminator = br.get_terminator();
+                if terminator.is_none() {
+                    if let Some(incr) = increment {
+                        self.compile_stmt(incr)?;
+                    }
+                    self.builder.build_unconditional_branch(loop_cond)?;
+                }
+
+                self.builder.position_at_end(after);
+                Ok(())
+            }
+
             Stmt::Return { value } => {
                 match value {
                     Some(v) => {
