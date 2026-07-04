@@ -1,4 +1,5 @@
 func main() -> int {
-    let mut x: int = 50; 
-    return x;
+    let mut x: int = 5;
+    let mut b: bool = true == false;
+    return 1;
 }

@@ -4,19 +4,31 @@ use std::{ops::Deref, path::Path};
 use std::collections::HashMap;
 use crate::error::CompileError;
 use inkwell::{
-    OptimizationLevel, builder::{Builder, BuilderError}, context::Context, module::Module, targets::{
+    OptimizationLevel, 
+    builder::{Builder, BuilderError}, 
+    context::Context, 
+    module::Module, 
+    targets::{
         CodeModel, 
         FileType, 
         InitializationConfig, 
         RelocMode, 
         Target, 
         TargetMachine,
-    }, types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum}, values::{
+    }, 
+    types::{
+        BasicMetadataTypeEnum, 
+        BasicType, 
+        BasicTypeEnum
+    }, 
+    values::{
         BasicValueEnum, 
+        BasicMetadataValueEnum, 
         FloatValue, 
-        IntValue,
+        IntValue, 
         PointerValue,
-    }
+        ValueKind,
+    },
 };
 
 use crate::token::Token;
@@ -97,7 +109,11 @@ impl <'ctx>Codegen<'ctx> {
                 let mut lhs = self.compile_expr(left)?;
                 let mut rhs = self.compile_expr(right)?;
                 if lhs.is_int_value() && rhs.is_int_value() {
-                    Ok(self.compile_int_binary(lhs.into_int_value(), operator, rhs.into_int_value())?.into())
+                    if Self::is_comparison(operator) {
+                        Ok(self.compile_int_comparison(lhs.into_int_value(), operator, rhs.into_int_value())?.into())
+                    } else {
+                        Ok(self.compile_int_binary(lhs.into_int_value(), operator, rhs.into_int_value())?.into())
+                    }
                 } else {
                     if lhs.is_int_value() {
                         lhs = self.builder.build_signed_int_to_float(
@@ -115,7 +131,38 @@ impl <'ctx>Codegen<'ctx> {
                         )?.into();
                     }
 
-                    Ok(self.compile_float_binary(lhs.into_float_value(), operator, rhs.into_float_value())?.into())
+                    if Self::is_comparison(operator) {
+                        Ok(self.compile_float_comparison(lhs.into_float_value(), operator, rhs.into_float_value())?.into())
+                    } else {
+                        Ok(self.compile_float_binary(lhs.into_float_value(), operator, rhs.into_float_value())?.into())
+                    }
+                }
+            }
+
+            Expr::Call { callee, arguments, .. } => {
+                if let Expr::Variable { name } = &**callee  {
+                    let function = self.module.get_function(&name.lexeme).ok_or_else(|| CompileError{
+                        span: name.start..name.end,
+                        message: format!("Unknown function: {:?}", &name.lexeme)
+                    });
+                    let mut arg_vec: Vec<BasicMetadataValueEnum> = vec![];
+                    for expression in arguments {
+                        let result = self.compile_expr(expression)?.into();
+                        arg_vec.push(result);
+                    }
+
+                    match self.builder.build_call(function?, &arg_vec, &name.lexeme)?.try_as_basic_value() {
+                        ValueKind::Basic(v) => {Ok(v)},
+                        ValueKind::Instruction(_) => {
+                            let i64_type = self.context.i64_type();
+                            Ok(i64_type.const_zero().into())
+                        }
+                    }
+                } else {
+                    return Err(CompileError { 
+                        span: 0..0, 
+                        message: format!("Only simple function calls are supported: {:?}.", callee) 
+                    });
                 }
             }
 
@@ -234,6 +281,19 @@ impl <'ctx>Codegen<'ctx> {
         Ok(())
     }
 
+    fn is_comparison(op: &Token) -> bool {
+        match op.token_type {
+            TokenType::Less |
+            TokenType::LessEqual |
+            TokenType::Greater |
+            TokenType::GreaterEqual |
+            TokenType::BangEqual |
+            TokenType::EqualEqual => {true}
+            
+            _ => false
+        }
+    }
+
     fn compile_int_binary(&self, lhs: IntValue<'ctx>, op: &Token, rhs: IntValue<'ctx>) -> Result<IntValue<'ctx>, CompileError> {
         match op.token_type {
             
@@ -264,6 +324,39 @@ impl <'ctx>Codegen<'ctx> {
         }
     }
 
+    fn compile_int_comparison(&self, lhs: IntValue<'ctx>, op: &Token, rhs: IntValue<'ctx>) -> Result<IntValue<'ctx>, CompileError> {
+        match op.token_type {
+            TokenType::Less => {
+                Ok(self.builder.build_int_compare(inkwell::IntPredicate::SLT, lhs, rhs, "slt")?)
+            }
+
+            TokenType::LessEqual => {
+                Ok(self.builder.build_int_compare(inkwell::IntPredicate::SLE, lhs, rhs, "sle")?)
+            }
+
+            TokenType::Greater => {
+                Ok(self.builder.build_int_compare(inkwell::IntPredicate::SGT, lhs, rhs, "sgt")?)
+            }
+
+            TokenType::GreaterEqual => {
+                Ok(self.builder.build_int_compare(inkwell::IntPredicate::SGE, lhs, rhs, "sge")?)
+            }
+
+            TokenType::BangEqual => {
+                Ok(self.builder.build_int_compare(inkwell::IntPredicate::NE, lhs, rhs, "ne")?)
+            }   
+
+            TokenType::EqualEqual => {
+                Ok(self.builder.build_int_compare(inkwell::IntPredicate::EQ, lhs, rhs, "eq")?)
+            }
+
+            _ => return Err(CompileError { 
+                        span: op.start..op.end, 
+                        message: "Unsupported int comparison expression.".to_string() 
+                    })
+        }
+    }
+
     fn compile_float_binary(&self, lhs: FloatValue<'ctx>, op: &Token, rhs: FloatValue<'ctx>) -> Result<FloatValue<'ctx>, CompileError> {
         match op.token_type {
             
@@ -287,6 +380,39 @@ impl <'ctx>Codegen<'ctx> {
                         span: op.start..op.end, 
                         message: "Unsupported float binary expression.".to_string() 
                     })
+        }
+    }
+
+    fn compile_float_comparison(&self, lhs: FloatValue<'ctx>, op: &Token, rhs: FloatValue<'ctx>) -> Result<IntValue<'ctx>, CompileError> {
+        match op.token_type {
+            TokenType::Less => {
+                    Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OLT, lhs, rhs, "olt")?)
+                }
+
+                TokenType::LessEqual => {
+                    Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OLE, lhs, rhs, "ole")?)
+                }
+
+                TokenType::Greater => {
+                    Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OGT, lhs, rhs, "ogt")?)
+                }
+
+                TokenType::GreaterEqual => {
+                    Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OGE, lhs, rhs, "oge")?)
+                }
+
+                TokenType::BangEqual => {
+                    Ok(self.builder.build_float_compare(inkwell::FloatPredicate::ONE, lhs, rhs, "one")?)
+                }   
+
+                TokenType::EqualEqual => {
+                    Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OEQ, lhs, rhs, "oeq")?)
+                }
+
+                _ => return Err(CompileError { 
+                            span: op.start..op.end, 
+                            message: "Unsupported float comparison expression.".to_string() 
+                        })
         }
     }
 
