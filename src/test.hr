@@ -1,5 +1,7 @@
 func main() -> int {
-    let mut x: int = 5;
-    let mut b: bool = true == false;
-    return 1;
+    let mut x:int = 10;
+    if (5 > 3) {
+        x = 7;
+    } else { x = 11; }
+    return x;
 }

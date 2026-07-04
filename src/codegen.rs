@@ -1,8 +1,8 @@
-use core::panic;
-use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, checker::Type, resolver, token::TokenType};
-use std::{ops::Deref, path::Path};
+use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, token::TokenType};
+use std::{path::Path};
 use std::collections::HashMap;
 use crate::error::CompileError;
+use crate::token::Token;
 use inkwell::{
     OptimizationLevel, 
     builder::{Builder, BuilderError}, 
@@ -29,9 +29,8 @@ use inkwell::{
         PointerValue,
         ValueKind,
     },
+    basic_block::BasicBlock,
 };
-
-use crate::token::Token;
 
 impl From<BuilderError> for CompileError {
     fn from(err: BuilderError) -> Self {
@@ -217,6 +216,37 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(())
             }
 
+            Stmt::If { params, then_branch, else_branch } => {
+                let c = self.compile_expr(params)?;
+                let og_block = self.builder.get_insert_block();
+                let fn_val = og_block.unwrap().get_parent().ok_or_else(|| CompileError {
+                    span: 0..0, 
+                    message: "Cannot get the fn_val for if statement.".to_string()
+                })?;
+
+                let then_block = self.context.append_basic_block(fn_val, "then_block");
+                let merge = self.context.append_basic_block(fn_val, "merge");
+
+                match else_branch {
+                    Some(b) => {
+                        let else_block = self.context.append_basic_block(fn_val, "else_block");
+                        self.builder.build_conditional_branch(c.into_int_value(), then_block, else_block)?;
+                        // * then
+                        self.compile_branch(then_block, then_branch, merge)?;
+                        // * else
+                        self.compile_branch(else_block, b, merge)?;
+                    }
+                    None => {
+                        self.builder.build_conditional_branch(c.into_int_value(), then_block, merge)?;
+                        // * then
+                        self.compile_branch(then_block, then_branch, merge)?;
+                    }
+                }
+
+                self.builder.position_at_end(merge);
+                Ok(())
+            }
+
             Stmt::Return { value } => {
                 match value {
                     Some(v) => {
@@ -274,10 +304,29 @@ impl <'ctx>Codegen<'ctx> {
         if return_type.is_none() && terminator.is_none() {
             self.builder.build_return(None)?;
         }
+        if return_type.is_some() && terminator.is_none() {
+            self.builder.build_unreachable()?;
+        }
         self.variables = og_variables;
         if let Some(b) = og_block {
             self.builder.position_at_end(b);
         };
+        Ok(())
+    }
+
+    fn compile_branch(&mut self, basic_block: BasicBlock<'ctx>, 
+    branch: &Stmt, destination_block: BasicBlock<'ctx>) -> Result<(), CompileError> {
+        self.builder.position_at_end(basic_block);
+        self.compile_stmt(branch)?;
+        let br = self.builder.get_insert_block().ok_or_else(|| CompileError{
+            span: 0..0,
+            message: "Builder is not positioned.".to_string()
+        })?;
+        let terminator = br.get_terminator();
+        if terminator.is_none() {
+            self.builder.build_unconditional_branch(destination_block)?;
+        }
+
         Ok(())
     }
 
