@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_parameter_leak() {
-        let mut lexer = Lexer::new("func foo(i: int){} let mut z: int = i;".to_string());
+        let mut lexer = Lexer::new("fn foo(i: int){} let mut z: int = i;".to_string());
         let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
@@ -401,8 +401,8 @@ mod tests {
     }
     
     #[test]
-    fn test_func_leak() {
-        let mut lexer = Lexer::new("func foo(i: char){ let mut b: int = i; }".to_string());
+    fn test_fn_leak() {
+        let mut lexer = Lexer::new("fn foo(i: char){ let mut b: int = i; }".to_string());
         let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
@@ -411,8 +411,8 @@ mod tests {
     }
 
     #[test]
-    fn test_func_double() {
-        let mut lexer = Lexer::new("func foo(i: int, i:int){}".to_string());
+    fn test_fn_double() {
+        let mut lexer = Lexer::new("fn foo(i: int, i:int){}".to_string());
         let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
@@ -426,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_class() {
-        let mut lexer = Lexer::new("class C { func foo(){ let mut q: int = 1; } }".to_string());
+        let mut lexer = Lexer::new("class C { fn foo(){ let mut q: int = 1; } }".to_string());
         let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
@@ -457,5 +457,4 @@ mod tests {
         let mut _resolver = resolver::Resolver::new();
         assert!(_resolver.resolve_stmts(&stmts).is_err() );
     }
-
 }

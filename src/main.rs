@@ -1,4 +1,4 @@
-use std::env;
+use std::env::{self, args};
 use std::io::{self, BufRead, Write};
 use std::fs;
 
@@ -16,19 +16,31 @@ mod codegen;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() > 2 {
-        println!("Usage: Rhype [script]");
-        std::process::exit(64);
-    }
-    else if args.len() == 2 {
-        run_file(&args[1])
-    }
-    else {
+    if args.len() < 2 {
         run_prompt();
+    } else if args.len() == 2 {
+        run_file(&args[1], "out");
+    } else if args.len() == 3 {
+        if &args[2] == "--usage" || &args[2] == "-u" {
+            println!("Usage: Rhype [script]");
+            std::process::exit(64);
+        } else {
+            println!("Unknown argument.")
+        }
+    } else if args.len() == 4 {
+        if &args[2] == "-o" {
+            let name = &args[3];
+            run_file(&args[1], name);
+        } else {
+            println!("Unknown argument.")
+        }
+        
+    } else {
+        println!("Unknown argument.")
     }
 } 
 
-fn run(source: &str) {
+fn run(source: &str,  out_name: &str) {
     let mut lexer = lexer::Lexer::new(source.to_string());
     match lexer.scan_tokens() {
         Ok(tokens) => {
@@ -44,29 +56,46 @@ fn run(source: &str) {
                                     // println!("{:?}", &stmts);
                                     let context = Context::create();
                                     let mut codegen = Codegen::new(&context);
-                                    match codegen.compile(&stmts) {
+                                    match codegen.compile(&stmts, out_name) {
                                         Ok(()) => {},
-                                        Err(e) => error::report_compile(source, &e),
+                                        Err(e) => {
+                                            error::report_compile(source, &e);
+                                            std::process::exit(69);
+                                        },
                                     }
                                 },
-                                Err(e) => error::report_type(source, &e),
+                                Err(e) => {
+                                    error::report_type(source, &e);
+                                    std::process::exit(68);
+                                },
+                                
                             }
                         },
-                        Err(e) => error::report_parse(source, &e),
+                        Err(e) => {
+                            error::report_parse(source, &e);
+                            std::process::exit(67);
+                        },
+                    
                     }
                 }
-                Err(e) => error::report_parse(source, &e),
+                Err(e) => {
+                    error::report_parse(source, &e);
+                    std::process::exit(66);
+                },
             }
             // println!("{:?}", tokens);
         }
-        Err(e) => error::report_lex(source, &e),
+        Err(e) => {
+            error::report_lex(source, &e);
+            std::process::exit(65)
+        },
     }
 }
 
-fn run_file(path: &str) {
+fn run_file(path: &str, out_name: &str) {
     let source = fs::read_to_string(path)
         .expect("Could not read file");
-    run(&source);
+    run(&source, out_name);
 }
 
 fn run_prompt() {
@@ -80,6 +109,6 @@ fn run_prompt() {
         if stdin.lock().read_line(&mut line).unwrap() == 0 {
             break;
         }
-        run(line.trim());
+        run(line.trim(), "out");
     }
 }

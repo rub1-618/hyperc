@@ -657,13 +657,13 @@ mod tests {
     }
 
     #[test]
-    fn test_func_ret() {
-        assert!(check_source("func foo() -> int { return 5; }").is_ok())
+    fn test_fn_ret() {
+        assert!(check_source("fn foo() -> int { return 5; }").is_ok())
     }
 
     #[test]
-    fn test_func_ret_err() {
-        assert!(check_source("func foo() -> int { return \"5\"; }").is_err())
+    fn test_fn_ret_err() {
+        assert!(check_source("fn foo() -> int { return \"5\"; }").is_err())
     }
 
     #[test]
@@ -673,13 +673,13 @@ mod tests {
 
     #[test]
     fn test_class_err() {
-        assert!(check_source("class Dog { func foo () -> int { return \"x\"; } }").is_err())
+        assert!(check_source("class Dog { fn foo () -> int { return \"x\"; } }").is_err())
     }
 
 
     #[test]
     fn test_call_arg_num_err() {
-        assert!(check_all_source(" func foo (x: int, y: int, z: bool) { return x; } foo(5, 7); ").is_err())
+        assert!(check_all_source("fn foo (x: int, y: int, z: bool) { return x; } foo(5, 7); ").is_err())
     }
 
     #[test]

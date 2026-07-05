@@ -711,7 +711,7 @@ mod tests {
     
     #[test]
     fn test_func() {
-        let mut lexer = Lexer::new("func foo( a: int ) { print( a ); }".to_string());
+        let mut lexer = Lexer::new("fn foo( a: int ) { print( a ); }".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
@@ -729,7 +729,7 @@ mod tests {
 
     #[test]
     fn test_class() {
-        let mut lexer = Lexer::new("class Dog (Animal) { func bark() { print(\"bark\"); } }".to_string());
+        let mut lexer = Lexer::new("class Dog (Animal) { fn bark() { print(\"bark\"); } }".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
@@ -738,7 +738,7 @@ mod tests {
 
     #[test]
     fn test_stacked() {
-        let mut lexer = Lexer::new("class Dog (Animal) { func bark() { let mut a: str = \"meow\"; a = \"bark\"; print( a ); } }".to_string());
+        let mut lexer = Lexer::new("class Dog (Animal) { fn bark() { let mut a: str = \"meow\"; a = \"bark\"; print( a ); } }".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();

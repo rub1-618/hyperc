@@ -1,5 +1,5 @@
 use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, token::TokenType};
-use std::{path::Path, sync::Arc};
+use std::{iter::Enumerate, path::Path, sync::Arc};
 use std::process::Command;
 use std::collections::HashMap;
 use crate::error::CompileError;
@@ -46,7 +46,7 @@ impl <'ctx>Codegen<'ctx> {
         Codegen { context, module, builder, variables }
     }
 
-    pub fn compile(&mut self, stmts: &[Stmt]) -> Result<(), CompileError> {
+    pub fn compile(&mut self, stmts: &[Stmt], out_name: &str) -> Result<(), CompileError> {
         for stmt in stmts {
             self.compile_stmt(stmt)?;
         }
@@ -61,7 +61,7 @@ impl <'ctx>Codegen<'ctx> {
                 });
             }
         }
-        self.emit_obj()?;
+        self.emit_obj(out_name)?;
         Ok(())
     }
 
@@ -403,6 +403,15 @@ impl <'ctx>Codegen<'ctx> {
         self.builder.position_at_end(basic_block);
         self.variables = HashMap::new();
 
+        for (i, (name, var_type)) in params.iter().enumerate() {
+            let index = i as u32;
+            let ty = self.var_to_llvm(&var_type)?;
+            let ptr = self.builder.build_alloca(ty, &name.lexeme)?;
+            let result = fn_val.get_nth_param(index).unwrap();
+            self.builder.build_store(ptr, result)?;
+            self.variables.insert(name.lexeme.clone(), (ptr, ty));
+        }
+
         self.compile_stmt(stmts)?;
 
         let block= self.builder.get_insert_block().ok_or_else(|| CompileError{
@@ -596,7 +605,7 @@ impl <'ctx>Codegen<'ctx> {
         }
     }
 
-    fn emit_obj(&self) -> Result<(), CompileError> {
+    fn emit_obj(&self, out_name: &str) -> Result<(), CompileError> {
         match Target::initialize_native(&InitializationConfig::default()) {
             Ok(()) => {}
             Err(e) => {
@@ -622,18 +631,20 @@ impl <'ctx>Codegen<'ctx> {
             span: 0..0,
             message: "Target machine creation failed.".to_string()
         })?;
-        let path = Path::new("/mnt/work_ssd/work/hyperrust/target/out.o");
+        let obj_path = format!("target/{}.o", out_name);
+        let path = Path::new(&obj_path);
         target_machine.write_to_file(&self.module, FileType::Object, path).map_err(|e| CompileError{
             span: 0..0,
             message: e.to_string()
         })?;
         let mut cc = Command::new("cc");
-        cc.arg(path);
+        cc.arg(obj_path);
         cc.arg("-o");
-        cc.arg("out");
+        cc.arg(out_name);
         match cc.status() {
             Ok(status) => {
                 if status.success() {
+                    println!("Compiled to: ./{}", out_name);
                     return Ok(())
                 } else {
                     return Err(CompileError {
@@ -650,6 +661,3 @@ impl <'ctx>Codegen<'ctx> {
         }
     }
 }
-
-// ! tests
-

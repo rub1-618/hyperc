@@ -51,7 +51,7 @@ impl Lexer {
             "false" => TokenType::False,
             "for" => TokenType::For,
             "while" => TokenType::While,
-            "func" => TokenType::Func,
+            "fn" => TokenType::Func,
             "null" => TokenType::Null,
             "print" => TokenType::Print,
             "return" => TokenType::Return,
