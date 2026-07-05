@@ -201,7 +201,7 @@ impl Lexer {
 
             '\n' => Ok(self.line  += 1),
 
-            '"' => {Ok(self.string())}
+            '"' => {Ok(self.string()?)}
 
             '\'' => {self.char()},
 
@@ -256,19 +256,28 @@ impl Lexer {
         return true;
     }
 
-    fn string(&mut self) {
+    fn string(&mut self) -> Result<(), LexerError> {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() != '\n' {
                 self.advance();
             } else {
                 self.line += 1;
+                self.advance();
             }
         }
+        if self.peek() != '"' || self.is_at_end() {
+            return Err(LexerError {
+                span: self.start..self.current,
+                message: "Expeced '\"' at the end of string".to_string()
+        })}
         self.advance();
-        self.add_token(TokenType::StringLit);
+        
+        let lexeme: String = self.source[self.start+1..self.current-1].to_string();
+        let token = Token::new(TokenType::StringLit, lexeme, self.line, self.start, self.current);
+        self.tokens.push(token);
+        Ok(())
     }
 
-    // todo: handle non-single char errors
     fn char(&mut self) -> Result<(), LexerError> {
         self.advance();
         if self.peek() == '\'' {

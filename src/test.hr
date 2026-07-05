@@ -1,7 +1,6 @@
-func main() -> float {
-    let mut z: float = 0.0;
-    for(let mut x: int = 10; x > 5; x = x - 1) {
-        z = z + 1;
-    }
-    return z;
+func main() -> int {
+    print(10);
+    print("hi");
+    print(0.0);
+    return 0;
 }

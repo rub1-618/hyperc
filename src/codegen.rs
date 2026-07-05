@@ -1,35 +1,23 @@
 use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, token::TokenType};
-use std::{path::Path};
+use std::{path::Path, result};
 use std::collections::HashMap;
 use crate::error::CompileError;
 use crate::token::Token;
 use inkwell::{
-    OptimizationLevel, 
-    builder::{Builder, BuilderError}, 
-    context::Context, 
-    module::Module, 
-    targets::{
+    AddressSpace, OptimizationLevel, basic_block::BasicBlock, builder::{Builder, BuilderError}, context::Context, llvm_sys::orc2::LLVMOrcObjectLinkingLayerRef, module::Module, targets::{
         CodeModel, 
         FileType, 
         InitializationConfig, 
         RelocMode, 
         Target, 
         TargetMachine,
-    }, 
-    types::{
+    }, types::{
         BasicMetadataTypeEnum, 
         BasicType, 
         BasicTypeEnum
-    }, 
-    values::{
-        BasicValueEnum, 
-        BasicMetadataValueEnum, 
-        FloatValue, 
-        IntValue, 
-        PointerValue,
-        ValueKind,
+    }, values::{
+        BasicMetadataValueEnum, BasicValueEnum, FloatValue, IntValue, PointerValue, ValueKind,
     },
-    basic_block::BasicBlock,
 };
 
 impl From<BuilderError> for CompileError {
@@ -89,7 +77,10 @@ impl <'ctx>Codegen<'ctx> {
                         let f64_type = self.context.f64_type();
                         Ok(f64_type.const_float(*f).into())
                     }
-                    // todo LiteralValue::String(s) => {}
+                    LiteralValue::String(s) => {
+                        let str = self.builder.build_global_string_ptr(s, "str")?; 
+                        Ok(str.as_pointer_value().into())
+                    }
                     // todo LiteralValue::Char(c) => {}
                     LiteralValue::Bool(b) => {
                         let bool_type = self.context.bool_type();
@@ -136,6 +127,10 @@ impl <'ctx>Codegen<'ctx> {
                         Ok(self.compile_float_binary(lhs.into_float_value(), operator, rhs.into_float_value())?.into())
                     }
                 }
+            }
+
+            Expr::Grouping { expr } => {
+                Ok(self.compile_expr(expr)?)
             }
 
             Expr::Call { callee, arguments, .. } => {
@@ -187,6 +182,31 @@ impl <'ctx>Codegen<'ctx> {
             
             Stmt::Expression { value } => {
                 self.compile_expr(value)?;
+                Ok(())
+            }
+
+            Stmt::Print { value } => {
+                let i32_type = self.context.i32_type();
+                let ptr = self.context.ptr_type(AddressSpace::default());
+                let fn_type = i32_type.fn_type(&[ptr.into()], true);
+
+                let print_fn = match self.module.get_function("printf") {
+                    Some(printf) => {printf}
+                    None => {
+                        self.module.add_function("printf", fn_type, None)
+                    }
+                };
+
+                let result = self.compile_expr(value)?;                
+                let fmt_str = if result.is_pointer_value() {
+                    "%s\n"
+                } else if result.is_float_value() {
+                    "%f\n"
+                } else {
+                    "%ld\n"
+                };
+                let fmt = self.builder.build_global_string_ptr(fmt_str, "fmt")?;
+                self.builder.build_call(print_fn, &[fmt.as_pointer_value().into(), result.into()], "print")?;
                 Ok(())
             }
 
@@ -551,7 +571,7 @@ impl <'ctx>Codegen<'ctx> {
             "generic", 
             "", 
             OptimizationLevel::None,
-            RelocMode::Default,
+            RelocMode::PIC,
             CodeModel::Default,
         ).ok_or_else(|| CompileError{
             span: 0..0,
