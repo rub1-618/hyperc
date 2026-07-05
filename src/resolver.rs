@@ -43,7 +43,6 @@ impl Resolver {
                 })
             }
         }
-        self.end_scope();
         if !has_main {
             return Err(ParseError { 
                     span: 0..0,
@@ -89,11 +88,7 @@ impl Resolver {
             },
 
             Stmt::Block { statements } => {
-                self.begin_scope();
-                for stmt in statements {
-                    self.resolve_stmt(&stmt)?;
-                }
-                self.end_scope();
+                self.resolve_stmts(statements)?;
 
                 Ok(())
             },
@@ -287,13 +282,23 @@ impl Resolver {
         self.scopes.pop();
     }
 
+    
+    fn resolve_stmts(&mut self, stmts: &[Stmt]) -> Result<(), ParseError> {
+        self.begin_scope();
+        for stmt in stmts {
+            self.resolve_stmt(stmt)?;
+        }
+        self.end_scope();
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::lexer::{Lexer};
     use crate::parser::{Parser};
-use crate::resolver;
+    use crate::resolver;
 
     #[test]
     fn test_resolve_ok() {
@@ -302,7 +307,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve(&stmts).is_ok() );
+        assert!(_resolver.resolve_stmts(&stmts).is_ok() );
     }
 
     #[test]
@@ -312,7 +317,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        let result = _resolver.resolve(&stmts);
+        let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Variable not found.")),
             Ok (()) => panic!("Expected error.")
@@ -326,7 +331,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        let result = _resolver.resolve(&stmts);
+        let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Variable is used in self-declarement.")),
             Ok (()) => panic!("Expected error.")
@@ -340,7 +345,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        let result = _resolver.resolve(&stmts);
+        let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Variable is already declared.")),
             Ok (()) => panic!("Expected error.")
@@ -349,22 +354,22 @@ use crate::resolver;
 
     #[test]
     fn test_block() {
-        let mut lexer = Lexer::new("let mut x: int = 5; { let mut y: int = x;}".to_string());
+        let mut lexer = Lexer::new("let mut x: int = 5; { let mut y: int = x; }".to_string());
         let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve(&stmts).is_ok() );
+        assert!(_resolver.resolve_stmts(&stmts).is_ok() );
     }
 
     #[test]
     fn test_for_leak() {
-        let mut lexer = Lexer::new("for(let mut i: int = 0; i<5; i+1){} let mut z: int = i;".to_string());
+        let mut lexer = Lexer::new("for(let mut i: int = 0; i<5; i = i + 1){} let mut z: int = i;".to_string());
         let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        let result = _resolver.resolve(&stmts);
+        let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Variable not found.")),
             Ok (()) => panic!("Expected error.")
@@ -373,12 +378,12 @@ use crate::resolver;
 
     #[test]
     fn test_for_inner() {
-        let mut lexer = Lexer::new("let mut x: int = 5; for(let mut i: int = 0; i<x; i+2){}".to_string());
+        let mut lexer = Lexer::new("let mut x: int = 5; for(let mut i: int = 0; i<x; i = i + 2){}".to_string());
         let _tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve(&stmts).is_ok() );
+        assert!(_resolver.resolve_stmts(&stmts).is_ok() );
     }
 
     #[test]
@@ -388,7 +393,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        let result = _resolver.resolve(&stmts);
+        let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Variable not found.")),
             Ok (()) => panic!("Expected error.")
@@ -402,7 +407,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve(&stmts).is_ok() );
+        assert!(_resolver.resolve_stmts(&stmts).is_ok() );
     }
 
     #[test]
@@ -412,7 +417,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        let result = _resolver.resolve(&stmts);
+        let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Already declared.")),
             Ok (()) => panic!("Expected error.")
@@ -426,7 +431,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve(&stmts).is_ok() );
+        assert!(_resolver.resolve_stmts(&stmts).is_ok() );
     } 
 
     #[test]
@@ -436,7 +441,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        let result = _resolver.resolve(&stmts);
+        let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Variable is used in self-declarement.")),
             Ok (()) => panic!("Expected error.")
@@ -450,7 +455,7 @@ use crate::resolver;
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve(&stmts).is_err() );
+        assert!(_resolver.resolve_stmts(&stmts).is_err() );
     }
 
 }

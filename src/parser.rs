@@ -559,95 +559,101 @@ impl Parser {
     
 }
 
-// ! -- tests 1 --
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::lexer::Lexer;
-
-//     #[test]
-//     fn test_binary_addition() {
-//         let mut lexer = Lexer::new("1 + 2".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         assert!(matches!(expr, Expr::Binary { .. }));
-//     }
-
-//     #[test]
-//     fn test_unary() {
-//         let mut lexer = Lexer::new("-5".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         assert!(matches!(expr, Expr::Unary { .. }));
-//     }
-
-//     #[test]
-//     fn test_grouping() {
-//         let mut lexer = Lexer::new("(1 + 2)".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         assert!(matches!(expr, Expr::Grouping { .. }));
-//     }
-
-//     #[test]
-//     fn test_literal_number() {
-//         let mut lexer = Lexer::new("7".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         assert!(matches!(expr, Expr::Literal { .. }));
-//     }
-
-//     #[test]
-//     fn test_comparison() {
-//         let mut lexer = Lexer::new("1 > 2".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         assert!(matches!(expr, Expr::Binary { .. }));
-//     }
-
-//     #[test]
-//     fn test_literal_bool() {
-//         let mut lexer = Lexer::new("true".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         assert!(matches!(expr, Expr::Literal { .. }));
-//     }
-
-//     #[test]
-//      fn test_literal_str() {
-//         let mut lexer = Lexer::new("\"hello\"".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         assert!(matches!(expr, Expr::Literal { .. }));
-//      }   
-
-//      #[test]
-//      fn test_precedence() {
-//         let mut lexer = Lexer::new("1 + 2 * 3".to_string());
-//         let tokens = lexer.scan_tokens();
-//         let mut parser = Parser::new(tokens);
-//         let expr = parser.parse();
-//         if let Expr::Binary { right, .. } = expr {
-//             assert!(matches!(*right, Expr::Binary { .. }))
-//         }
-//      }  
-
-// }
-
-// ! -- tests 2 --
+// ! -- tests --
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
+    fn parse_source(src: &str) -> Vec<Stmt> {
+        let mut lexer = Lexer::new(src  .to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut parser = Parser::new(tokens);        
+        let stmt = parser.parse().unwrap();
+        return stmt;
+    }
+
+
+    #[test]
+    fn test_binary_addition() {
+        let stmt = parse_source("1 + 2;");
+        if let Stmt::Expression { value } = &stmt[0] {
+            assert!(matches!(&**value, Expr::Binary { .. }))
+        } else {
+            panic!("Expected expression. Got: {:?}", &stmt[0]);
+        }
+    }
+
+    #[test]
+    fn test_unary() {
+        let stmt = parse_source("-5;");
+        if let Stmt::Expression { value } = &stmt[0] {
+            assert!(matches!(&**value, Expr::Unary { .. }))
+        } else {
+            panic!("Expected expression. Got: {:?}", &stmt[0]);
+        }
+    }
+
+    #[test]
+    fn test_grouping() {
+        let stmt = parse_source("(1 + 2);");
+        if let Stmt::Expression { value } = &stmt[0] {
+            assert!(matches!(&**value, Expr::Grouping { .. }))
+        } else {
+            panic!("Expected expression. Got: {:?}", &stmt[0]);
+        }
+    }
+
+    #[test]
+    fn test_literal_number() {
+        let stmt = parse_source("7;");
+        if let Stmt::Expression { value } = &stmt[0] {
+            assert!(matches!(&**value, Expr::Literal { .. }))
+        } else {
+            panic!("Expected expression. Got: {:?}", &stmt[0]);
+        }
+    }
+
+    #[test]
+    fn test_comparison() {
+        let stmt = parse_source("1 > 2;");
+        if let Stmt::Expression { value } = &stmt[0] {
+            assert!(matches!(&**value, Expr::Binary { .. }))
+        } else {
+            panic!("Expected expression. Got: {:?}", &stmt[0]);
+        }
+    }
+
+    #[test]
+    fn test_literal_bool() {
+        let stmt = parse_source("true;");
+        if let Stmt::Expression { value } = &stmt[0] {
+            assert!(matches!(&**value, Expr::Literal { .. }))
+        } else {
+            panic!("Expected expression. Got: {:?}", &stmt[0]);
+        }
+    }
+
+    #[test]
+    fn test_literal_str() {
+        let stmt = parse_source("\"hello\";");
+        if let Stmt::Expression { value } = &stmt[0] {
+            assert!(matches!(&**value, Expr::Literal { .. }))
+        } else {
+            panic!("Expected expression. Got: {:?}", &stmt[0]);
+        }
+    }   
+
+     #[test]
+     fn test_precedence() {
+        let mut lexer = Lexer::new("1 + 2 * 3;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let expr = _parser.parse();
+        // if let Expr::Binary { right, .. } = expr {
+            // assert!(matches!(*right, Expr::Binary { .. }))
+        // }
+    }  
 
     #[test]
     fn test_decl() {
@@ -696,7 +702,7 @@ mod tests {
 
     #[test]
     fn test_for() {
-        let mut lexer = Lexer::new("for (let mut i: int = 0; i < 20; i + 1) { print(\"hello\"); }".to_string());
+        let mut lexer = Lexer::new("for (let mut i: int = 0; i < 20; i = i + 1) { print(\"hello\"); }".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();

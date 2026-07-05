@@ -41,7 +41,7 @@ fn run(source: &str) {
                             let mut _checker = checker::TypeChecker::new();
                             match _checker.check(&stmts) {
                                 Ok(()) => {
-                                    println!("{:?}", &stmts);
+                                    // println!("{:?}", &stmts);
                                     let context = Context::create();
                                     let mut codegen = Codegen::new(&context);
                                     match codegen.compile(&stmts) {
@@ -57,7 +57,7 @@ fn run(source: &str) {
                 }
                 Err(e) => error::report_parse(source, &e),
             }
-            println!("{:?}", tokens);
+            // println!("{:?}", tokens);
         }
         Err(e) => error::report_lex(source, &e),
     }
