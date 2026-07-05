@@ -3,7 +3,6 @@ use std::ops::Range;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, Stmt, LiteralValue, VarType};
 use crate::error::TypeError;
-use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Type {
@@ -129,7 +128,7 @@ impl TypeChecker {
                     _ => {
                         return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "Unsupported binary operator.".to_string() 
+                                message: "This binary operator is not supported in v0.1.".to_string() 
                             })
                     },
                 }
@@ -165,7 +164,7 @@ impl TypeChecker {
                     _ => {
                         return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "Unsupported unary operator.".to_string() 
+                                message: "This unary operator is not supported in v0.1.".to_string() 
                             })
                         }
                 }
@@ -271,9 +270,9 @@ impl TypeChecker {
                 let expected = match self.lookup(&name.lexeme) {
                     Some(t) => t,
                     _ => return Err(TypeError { 
-                                span: name.start..name.end, 
-                                message: "Unknown variable.".to_string() 
-                            }),
+                            span: name.start..name.end, 
+                            message: "Unknown variable.".to_string() 
+                        }),
                 };
                 let ty = self.infer(value)?;
                 if expected == ty {

@@ -31,7 +31,7 @@ pub enum TokenType {
     StrType,                                                        // | str |
     CharType,                                                       // | char |
     BoolType,                                                       // | bool |
-    ArrType,                                                        // | arr |
+    // todo ArrType,                                                        // | arr |
 
     // Hyper-Rust only
     // ...

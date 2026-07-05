@@ -3,5 +3,6 @@ func main() -> int {
     print("hi");
     print(0.0);
     print(!true);
+    print('c');
     return 0;
 }

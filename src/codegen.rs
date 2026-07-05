@@ -1,10 +1,11 @@
 use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, token::TokenType};
-use std::{path::Path, result};
+use std::{path::Path, sync::Arc};
+use std::process::Command;
 use std::collections::HashMap;
 use crate::error::CompileError;
 use crate::token::Token;
 use inkwell::{
-    AddressSpace, OptimizationLevel, basic_block::BasicBlock, builder::{Builder, BuilderError}, context::Context, llvm_sys::orc2::LLVMOrcObjectLinkingLayerRef, module::Module, targets::{
+    AddressSpace, OptimizationLevel, basic_block::BasicBlock, builder::{Builder, BuilderError}, context::Context, module::Module, targets::{
         CodeModel, 
         FileType, 
         InitializationConfig, 
@@ -81,7 +82,11 @@ impl <'ctx>Codegen<'ctx> {
                         let str = self.builder.build_global_string_ptr(s, "str")?; 
                         Ok(str.as_pointer_value().into())
                     }
-                    // todo LiteralValue::Char(c) => {}
+                    LiteralValue::Char(c) => {
+                        let char_type = self.context.i8_type();
+                        let value_i8 = *c as u64;
+                        Ok(char_type.const_int(value_i8, false).into())
+                    }
                     LiteralValue::Bool(b) => {
                         let bool_type = self.context.bool_type();
                         let value_bool = *b as u64;
@@ -90,7 +95,7 @@ impl <'ctx>Codegen<'ctx> {
                     // todo LiteralValue::Null() => {}
                     _ => return Err(CompileError { 
                         span: 0..0, 
-                        message: format!("Unsupported literal: {:?}", value) 
+                        message: format!("Literal: {:?}, is not supported in v0.1.", value) 
                     })
                 }
             },
@@ -146,7 +151,7 @@ impl <'ctx>Codegen<'ctx> {
 
                     _ => Err( CompileError { 
                         span: operator.start..operator.end, 
-                        message: "Unsupported unary ooperator.".to_string() 
+                        message: "This unary operator is not supported in v0.1.".to_string() 
                     })
                     
                 }
@@ -190,13 +195,6 @@ impl <'ctx>Codegen<'ctx> {
                 })?;
                 Ok(self.builder.build_load(ty, ptr, &name.lexeme)?)
             }
-
-            _ => {return Err(CompileError { 
-                    span: 0..0, 
-                    message: format!("Unsupported expression type: {:?}.", expr) 
-                });
-            }
-        
         }
     }
 
@@ -225,6 +223,8 @@ impl <'ctx>Codegen<'ctx> {
                     "%s\n"
                 } else if result.is_float_value() {
                     "%f\n"
+                } else if result.into_int_value().get_type().get_bit_width() == 8 {
+                    "%c\n"
                 } else {
                     "%ld\n"
                 };
@@ -376,7 +376,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => {Err(CompileError { 
                 span: 0..0, 
-                message: format!("Unsupported statement type: {:?}.", stmt)  
+                message: format!("Statement: {:?}, is not supported in v0.1.", stmt)  
             })}
         }
     }
@@ -477,7 +477,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => return Err(CompileError { 
                         span: op.start..op.end, 
-                        message: "Unsupported int binary expression.".to_string() 
+                        message: "This binary expression is not supported in v0.1.".to_string() 
                     })
         }
     }
@@ -510,7 +510,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => return Err(CompileError { 
                         span: op.start..op.end, 
-                        message: "Unsupported int comparison expression.".to_string() 
+                        message: "This int comparison expression is not supported in v0.1.".to_string() 
                     })
         }
     }
@@ -536,7 +536,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => return Err(CompileError { 
                         span: op.start..op.end, 
-                        message: "Unsupported float binary expression.".to_string() 
+                        message: "This float binary expression is not supported in v0.1.".to_string() 
                     })
         }
     }
@@ -569,8 +569,30 @@ impl <'ctx>Codegen<'ctx> {
 
                 _ => return Err(CompileError { 
                             span: op.start..op.end, 
-                            message: "Unsupported float comparison expression.".to_string() 
+                            message: "This float comparison expression is not supported in v0.1.".to_string() 
                         })
+        }
+    }
+
+    fn var_to_llvm(&self, var_type: &VarType) -> Result<BasicTypeEnum<'ctx>, CompileError> {
+        match var_type {
+            VarType::Int => {
+                Ok(self.context.i64_type().into())
+            },
+            VarType::Float => {
+                Ok(self.context.f64_type().into())
+            },
+            // todo VarType::Str => {},
+            VarType::Char => {
+                Ok(self.context.i8_type().into())
+            },
+            VarType::Bool => {
+                Ok(self.context.bool_type().into())
+            },
+            _ => return Err(CompileError { 
+                span: 0..0, 
+                message: "VarType to LLVM conversion failed.".to_string() 
+            })
         }
     }
 
@@ -605,26 +627,26 @@ impl <'ctx>Codegen<'ctx> {
             span: 0..0,
             message: e.to_string()
         })?;
-        Ok(())
-    }
-
-    fn var_to_llvm(&self, var_type: &VarType) -> Result<BasicTypeEnum<'ctx>, CompileError> {
-        match var_type {
-            VarType::Int => {
-                Ok(self.context.i64_type().into())
+        let mut cc = Command::new("cc");
+        cc.arg(path);
+        cc.arg("-o");
+        cc.arg("out");
+        match cc.status() {
+            Ok(status) => {
+                if status.success() {
+                    return Ok(())
+                } else {
+                    return Err(CompileError {
+                        span: 0..0, 
+                        message: format!("Autolinking failed: {:?}", status.code()) 
+                    })
+                }
+                
             },
-            VarType::Float => {
-                Ok(self.context.f64_type().into())
-            },
-            // todo VarType::Str => {},
-            // todo VarType::Char => {},
-            VarType::Bool => {
-                Ok(self.context.bool_type().into())
-            },
-            _ => return Err(CompileError { 
+            Err(e) => { return Err(CompileError {
                 span: 0..0, 
-                message: "VarType to LLVM conversion failed.".to_string() 
-            })
+                message: format!("Autolinking failed: {:?}", e) 
+            })}
         }
     }
 }

@@ -1,8 +1,6 @@
-use inkwell::attributes::AttributeLoc::Function;
-
 use crate::error::{ParseError};
-use crate::token::{TokenType, Token};
-use crate::ast::{Expr, LiteralValue, Stmt, VarKind, VarType};
+use crate::token::{Token};
+use crate::ast::{Expr, Stmt, VarKind, VarType};
 use std::collections::HashMap;
 use std::ops::Range;
 
