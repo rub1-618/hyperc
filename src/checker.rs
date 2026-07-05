@@ -563,6 +563,11 @@ mod tests {
     }
 
     #[test]
+    fn test_unar_int_err() {
+        assert!(infer_source("!5;").is_err())
+    }
+
+    #[test]
     fn test_unar_str_err() {
         assert!(infer_source("-\"string\";").is_err())
     }

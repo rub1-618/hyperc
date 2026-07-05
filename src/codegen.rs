@@ -129,6 +129,29 @@ impl <'ctx>Codegen<'ctx> {
                 }
             }
 
+            Expr::Unary { operator, right } => {
+                let result = self.compile_expr(right)?;
+                match operator.token_type {
+                    TokenType::Minus => {
+                        if result.is_int_value() {
+                            Ok(self.builder.build_int_neg(result.into_int_value(), "ngi").unwrap().into())
+                        } else {
+                            Ok(self.builder.build_float_neg(result.into_float_value(), "ngf").unwrap().into())
+                        }
+                    }
+
+                    TokenType::Bang => {
+                        Ok(self.builder.build_not(result.into_int_value(), "unb").unwrap().into())
+                    }
+
+                    _ => Err( CompileError { 
+                        span: operator.start..operator.end, 
+                        message: "Unsupported unary ooperator.".to_string() 
+                    })
+                    
+                }
+            }
+
             Expr::Grouping { expr } => {
                 Ok(self.compile_expr(expr)?)
             }
