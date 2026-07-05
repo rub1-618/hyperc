@@ -46,7 +46,7 @@ impl <'ctx>Codegen<'ctx> {
         Codegen { context, module, builder, variables }
     }
 
-    pub fn compile(&mut self, stmts: &[Stmt], out_name: &str) -> Result<(), CompileError> {
+    pub fn compile(&mut self, stmts: &[Stmt], path: &str, out_name: &str) -> Result<(), CompileError> {
         for stmt in stmts {
             self.compile_stmt(stmt)?;
         }
@@ -61,7 +61,7 @@ impl <'ctx>Codegen<'ctx> {
                 });
             }
         }
-        self.emit_obj(out_name)?;
+        self.emit_obj(path, out_name)?;
         Ok(())
     }
 
@@ -605,7 +605,7 @@ impl <'ctx>Codegen<'ctx> {
         }
     }
 
-    fn emit_obj(&self, out_name: &str) -> Result<(), CompileError> {
+    fn emit_obj(&self, path: &str, out_name: &str) -> Result<(), CompileError> {
         match Target::initialize_native(&InitializationConfig::default()) {
             Ok(()) => {}
             Err(e) => {
@@ -631,20 +631,22 @@ impl <'ctx>Codegen<'ctx> {
             span: 0..0,
             message: "Target machine creation failed.".to_string()
         })?;
-        let obj_path = format!("target/{}.o", out_name);
-        let path = Path::new(&obj_path);
-        target_machine.write_to_file(&self.module, FileType::Object, path).map_err(|e| CompileError{
+        let out_path = Path::new(path).parent().unwrap_or(Path::new("."));
+        let obj_path = out_path.join(format!("{}.o", out_name));
+        let exe_path = out_path.join(out_name);
+
+        target_machine.write_to_file(&self.module, FileType::Object, &obj_path).map_err(|e| CompileError{
             span: 0..0,
             message: e.to_string()
         })?;
         let mut cc = Command::new("cc");
-        cc.arg(obj_path);
+        cc.arg(&obj_path);
         cc.arg("-o");
-        cc.arg(out_name);
+        cc.arg(&exe_path);
         match cc.status() {
             Ok(status) => {
                 if status.success() {
-                    println!("Compiled to: ./{}", out_name);
+                    println!("Compiled to: {}", &exe_path.display());
                     return Ok(())
                 } else {
                     return Err(CompileError {
@@ -656,7 +658,7 @@ impl <'ctx>Codegen<'ctx> {
             },
             Err(e) => { return Err(CompileError {
                 span: 0..0, 
-                message: format!("Autolinking failed: {:?}", e) 
+                message: format!("Autolinking failed: {:?} on {}", e, &obj_path.display()) 
             })}
         }
     }

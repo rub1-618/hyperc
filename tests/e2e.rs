@@ -1,7 +1,7 @@
 use std::{path::Path, process::{Command, Output}};
 
 fn run_hr(path: &str) -> (Output, String) {
-    let compiler = env!("CARGO_BIN_EXE_hyperrust");
+    let compiler = env!("CARGO_BIN_EXE_hyperc");
 
     let cmd_path = Path::new(path).file_stem().unwrap().to_str().unwrap();
 
@@ -11,7 +11,7 @@ fn run_hr(path: &str) -> (Output, String) {
     cmd.arg(cmd_path);
     let status = cmd.status().unwrap();
     assert!(status.success());
-    let out = format!("./{}", cmd_path);
+    let out = format!("tests/fixtures/{}", cmd_path);
     let cmd_out = Command::new(out)
     .output().unwrap();
 
@@ -23,7 +23,7 @@ fn run_hr(path: &str) -> (Output, String) {
 #[test]
 fn test_parade() {
     let (cmd_out, std_out) = run_hr("tests/fixtures/test_parade.hr");
-    assert_eq!(std_out, "-10\nhi\n0.000000\n0\nc\n");
+    assert_eq!(std_out, "-10\nhi\n0.000000\n0\nc\n"); 
     assert_eq!(cmd_out.status.code(), Some(0));  
 }
 

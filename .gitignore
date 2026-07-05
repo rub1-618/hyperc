@@ -1,4 +1,12 @@
-/target
-test.hr
-out
 .gitignore
+/target
+
+# ! debug file
+test.hr
+
+# ! debug out
+out
+
+# ! tests
+tests/fixtures/test_*
+!tests/fixtures/*.hr
