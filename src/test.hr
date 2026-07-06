@@ -1,8 +1,5 @@
 fn main() -> int {
-    print(-10);
-    print("hi");
-    print(0.0);
-    print(!true);
-    print('c');
+    let const x: int = 10;
+    x = 5;
     return 0;
 }
