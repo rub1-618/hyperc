@@ -202,7 +202,7 @@ impl Parser {
                 self.consume(TokenType::LeftBrace, "Expected '{' in struct literal expression.")?;
                 while !self.check(TokenType::RightBrace) {
                     let field_name= self.consume(TokenType::Identifier, "Expected field name.")?;
-                    self.consume(TokenType::Colon,  "Expected ':' in struct fields after value.")?;
+                    self.consume(TokenType::Colon,  "Expected ':' in struct literal fields after value.")?;
                     let expr = self.expression()?;
                     fields.push((field_name, Box::new(expr)));
                     if !self.match_token(&[TokenType::Comma]){break}
@@ -646,6 +646,8 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+use core::panic;
+
 use super::*;
     use crate::lexer::Lexer;
     fn parse_source(src: &str) -> Vec<Stmt> {
@@ -734,7 +736,7 @@ use super::*;
         let mut _parser = Parser::new(tokens.clone());
         let expr = _parser.parse();
         // if let Expr::Binary { right, .. } = expr {
-            // assert!(matches!(*right, Expr::Binary { .. }))
+        //     assert!(matches!(*right, Expr::Binary { .. }))
         // }
     }  
 
@@ -764,7 +766,204 @@ use super::*;
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Assign { .. }));
     }
+
+    #[test]
+    fn test_assign_get() {
+        let mut lexer = Lexer::new("p.x = \"hello\";".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Assign { target, .. } => {
+                match &**target {
+                    Expr::Get { object, field } => {
+                        assert_eq!(field.lexeme, "x");
+                        match &**object {
+                            Expr::Variable { name } => {
+                                assert_eq!(name.lexeme, "p")
+                            }
+                            _ => panic!("Expected variable expression.")
+                        }
+                    }
+                    _ => panic!("Expected get expression.")
+                }
+            }
+            _ => panic!("Expected assign statement.")
+        }
+    }
     
+    #[test]
+    fn test_assign_get_get() {
+        let mut lexer = Lexer::new("p.a.b = 5;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Assign { target, .. } => {
+                match &**target {
+                    Expr::Get { object, field } => {
+                        assert_eq!(field.lexeme, "b");
+                        match &**object {
+                            Expr::Get { object, field } => {
+                                assert_eq!(field.lexeme, "a");
+                                match &**object {
+                                    Expr::Variable { name } => {
+                                        assert_eq!(name.lexeme, "p")
+                                    }
+                                    _ => panic!("Expected variable expression.")
+                                }
+                            }
+                            _ => panic!("Expected get expression.")
+                        }
+                    }
+                    _ => panic!("Expected get expression.")
+                }
+            }
+            _ => panic!("Expected assign statement.")
+        }
+    }
+
+    #[test]
+    fn test_assign_target_err() {
+        let mut lexer = Lexer::new("5 = y;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        match stmt {
+            Err(e) => assert!(e.message.contains("Invalid assignment target.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_assign_target_func_err() {
+        let mut lexer = Lexer::new("f() = 4;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        match stmt {
+            Err(e) => assert!(e.message.contains("Invalid assignment target.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_structlit() {
+        let mut lexer = Lexer::new("let const p: Point = Point { x: 5, y: 7, };".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Let { value, .. } => {
+                match &**value {
+                    Expr::StructLit { fields, .. } => {
+                        assert_eq!(fields.len(), 2);
+                    }
+                    _ => panic!("Expected structlit expression.")
+                }
+            }
+            _ => panic!("Expected let statement.")
+        }
+    }
+
+    #[test]
+    fn test_structlit_none() {
+        let mut lexer = Lexer::new("let const p: Point = Point { };".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Let { value, .. } => {
+                match &**value {
+                    Expr::StructLit { fields, .. } => {
+                        assert_eq!(fields.len(), 0);
+                    }
+                    _ => panic!("Expected structlit expression.")
+                }
+            }
+            _ => panic!("Expected let statement.")
+        }
+    }
+
+    #[test]
+    fn test_if_structlit() {
+        let mut lexer = Lexer::new("if (p == Point { x: 2 }) {print(1);}".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        assert!(_parser.parse().is_ok());
+    }
+
+    #[test]
+    fn test_structlit_notype_err() {
+        let mut lexer = Lexer::new("let mut a: C = C { cpp }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse(); 
+        match stmt {
+            Err(e) => assert!(e.message.contains("Expected ':' in struct literal fields after value.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_path() {
+        let mut lexer = Lexer::new("Color::Red;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Expression { value, .. } => {
+                match &**value {
+                    Expr::Path { type_name, item } => {
+                        assert_eq!(type_name.lexeme, "Color");
+                        assert_eq!(item.lexeme, "Red");
+                    }
+                    _ => panic!("Expected path expression.")
+                }
+            }
+            _ => panic!("Expected assign statement.")
+        }
+    }
+
+    #[test]
+    fn test_path_call() {
+        let mut lexer = Lexer::new("Color::new(\"red\", \"blue\");".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Expression { value, .. } => {
+                match &**value {
+                    Expr::Call { callee, arguments, .. } => {
+                        match &**callee {
+                            Expr::Path { type_name, item } => {
+                                assert_eq!(type_name.lexeme, "Color");
+                                assert_eq!(item.lexeme, "new");
+                            }
+                            _ => panic!("Expected path expression.")
+                        }
+                        assert_eq!(arguments.len(), 2)
+                    }
+                    _ => panic!("Expected call statement.")
+                }
+            }
+            _ => panic!("Expected expression statement.")
+        }
+    }
+
+
+    #[test]
+    fn test_path_err() {
+        let mut lexer = Lexer::new("Path::".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        match stmt {
+            Err(e) => assert!(e.message.contains("Expected identifier after '::'.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+
     #[test]
     fn test_block() {
         let mut lexer = Lexer::new("{ let mut x: str = \"hello from block!\"; }".to_string());
