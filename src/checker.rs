@@ -4,7 +4,7 @@ use crate::token::{TokenType, Token};
 use crate::ast::{Expr, Stmt, LiteralValue, VarType};
 use crate::error::TypeError;
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Int,
     Float,
@@ -12,6 +12,7 @@ pub enum Type {
     Char,
     Bool,
     Unit,
+    Named(String),
     Error, // todo
 }
 
@@ -24,7 +25,8 @@ impl std::fmt::Display for Type {
             Type::Char => write!(f, "char"),
             Type::Bool => write!(f, "bool"),
             Type::Unit => write!(f, "()"),
-            Type::Error => write!(f, "<error>")
+            Type::Named(name) => write!(f, "{}", name),
+            Type::Error => write!(f, "<error>"),
         }
     }
 }
@@ -233,9 +235,30 @@ impl TypeChecker {
                         }
                 }
             }
+
+            Expr::StructLit { name, .. } => {
+                return Err(TypeError { 
+                    span: name.start..name.end, 
+                    message: "Struct literals are not supported yet.".to_string() 
+                });
+            }
+
+            Expr::Get {  field, .. } => {
+                return Err(TypeError { 
+                    span: field.start..field.end, 
+                    message: "Field access is not supported yet.".to_string()
+                })
+            }
+
+            Expr::Path { type_name, .. } => {
+                return Err(TypeError { 
+                    span: type_name.start..type_name.end, 
+                    message: "Paths are not supported yet.".to_string()
+                })
+            }
         }
     }
-
+      
     pub fn vartype_to_type(vt: &VarType) -> Type {
         match vt {
             VarType::Int => {Type::Int},
@@ -243,6 +266,7 @@ impl TypeChecker {
             VarType::Str => {Type::Str},
             VarType::Char => {Type::Char},
             VarType::Bool => {Type::Bool},
+            VarType::Named(tok) => Type::Named(tok.lexeme.clone()),
         }
     }
 
@@ -266,23 +290,36 @@ impl TypeChecker {
                 }
             }
 
-            Stmt::Assign { name, value } => {
-                let expected = match self.lookup(&name.lexeme) {
-                    Some(t) => t,
-                    _ => return Err(TypeError { 
-                            span: name.start..name.end, 
-                            message: "Unknown variable.".to_string() 
-                        }),
-                };
-                let ty = self.infer(value)?;
-                if expected == ty {
-                    return Ok(())
-                }
-
-                return Err(TypeError { 
+            Stmt::Assign {  target, value } => {
+                match  &**target {
+                    Expr::Variable { name } => {
+                        let expected = match self.lookup(&name.lexeme) {
+                            Some(t) => t,
+                            _ => return Err(TypeError { 
+                                    span: name.start..name.end, 
+                                    message: "Unknown variable.".to_string() 
+                                }),
+                        };
+                        let ty = self.infer(value)?;
+                        if expected == ty {
+                            return Ok(())
+                        } else {
+                            return Err(TypeError { 
                                 span: name.start..name.end, 
                                 message: format!("Mismatched type. Got: {}, expected: {}.", ty, expected)
                             })
+                        }
+                    }
+
+                    Expr::Get { object, field } => {
+                        return Err(TypeError { 
+                            span: field.start..field.end, 
+                            message: "Field assignment is not supported yet.".to_string()
+                        });
+                    }
+
+                    _ => unreachable!()
+                } 
             }
 
             Stmt::Block { statements } => {
@@ -357,11 +394,10 @@ impl TypeChecker {
                 result
             }
 
-            // todo missing return analysis
             Stmt::Return { value } => {
                 let span = match value {
                     Some(sp) => Self::expr_span(sp),
-                    None => 0..0,
+                    None => 0..0, // todo
                 };
 
                 let ret_type = match value {
@@ -369,9 +405,9 @@ impl TypeChecker {
                     None => Type::Unit,
                 };
 
-                match self.current_return {
+                match &self.current_return {
                     Some(expected) => {
-                        if expected == ret_type {
+                        if expected == &ret_type {
                             return Ok(())
                         } else {
                             return Err(TypeError { 
@@ -388,12 +424,12 @@ impl TypeChecker {
             }
 
             Stmt::Function { name, params, statements , return_type} => {
-                let prev = self.current_return;
+                let prev = self.current_return.take();
                 let prev_fn = match return_type{
                     Some(vt) => Self::vartype_to_type(vt),
                     None => Type::Unit,
                 };
-                self.current_return = Some(prev_fn);
+                self.current_return = Some(prev_fn.clone());
                 let mut param_types = vec![];
                 for p in params {
                     param_types.push(Self::vartype_to_type(&p.1));
@@ -431,6 +467,21 @@ impl TypeChecker {
                 for method in methods {
                     self.check_stmt(method)?;
                 }
+                Ok(())
+            }
+
+            Stmt::Struct { name, fields } => {
+                Ok(())
+            }
+
+            Stmt::Impl { name, methods } => {
+                for method in methods {
+                    self.check_stmt(method)?;
+                }
+                Ok(())
+            }
+
+            Stmt::Enum { name, variants } => {
                 Ok(())
             }
         }
@@ -478,13 +529,16 @@ impl TypeChecker {
             Expr::Variable { name } => name.start..name.end,
             Expr::Literal { span, .. } => span.clone(),
             Expr::Grouping { expr } => Self::expr_span(expr),
+            Expr::StructLit { name, .. } => name.start..name.end,
+            Expr::Get { field, .. } => field.start..field.end,
+            Expr::Path { type_name, .. } => type_name.start..type_name.end,
         }
     }
 
     fn lookup(&self, name: &str) -> Option<Type> {
         for scope in self.scopes.iter().rev() {
             if let Some(ty) = scope.get(name) {
-                return Some(*ty)
+                return Some(ty.clone())
             }
         }
         None

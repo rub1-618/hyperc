@@ -33,6 +33,21 @@ pub enum Expr {
     Variable {
         name: Token,
     },
+
+    StructLit {
+        name: Token,
+        fields: Vec<(Token, Box<Expr>)>
+    },
+
+    Get {
+        object: Box<Expr>,
+        field: Token,
+    },
+
+    Path {
+        type_name: Token,
+        item: Token,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -53,7 +68,7 @@ pub enum Stmt {
     },
 
     Assign {
-        name: Token,
+        target: Box<Expr>,
         value: Box<Expr>,
     },
 
@@ -95,6 +110,21 @@ pub enum Stmt {
         superclass: Option<Token>,
         methods: Vec<Stmt>,
     },
+
+    Struct {
+        name: Token,
+        fields: Vec<(Token, VarType)>,
+    },
+
+    Impl {
+        name: Token,
+        methods: Vec<Stmt>
+    },
+
+    Enum {
+        name: Token,
+        variants: Vec<Token>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -120,4 +150,5 @@ pub enum VarType {
     Str,
     Char,
     Bool,
+    Named(Token),
 }

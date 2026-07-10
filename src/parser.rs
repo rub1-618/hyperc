@@ -1,4 +1,7 @@
+use inkwell::llvm_sys::target_machine;
+
 use crate::error::{ParseError};
+use crate::token::TokenType::Enum;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, LiteralValue, Stmt, VarKind, VarType};
 
@@ -265,6 +268,18 @@ impl Parser {
             return Ok(self.class_declaration()?)
         }
 
+        if self.match_token(&[TokenType::Struct]) {
+            return Ok(self.struct_declaration()?)
+        }
+
+        if self.match_token(&[TokenType::Impl]) {
+            return Ok(self.impl_declaration()?)
+        }
+
+        if self.match_token(&[TokenType::Enum]) {
+            return Ok(self.enum_declaration()?)
+        }
+
         // else -> expr
 
         return Ok(self.expression_statement()?)
@@ -459,10 +474,74 @@ impl Parser {
         return Ok(Stmt::Class { name, superclass, methods })
     }
 
+    // struct
+
+    fn struct_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let name = self.consume(TokenType::Identifier, "No identifier for the struct specified.")?;
+        self.consume(TokenType::LeftBrace, "Expected '{' in struct statement.")?;
+        let mut fields: Vec<(Token, VarType)> = vec![];
+        while !self.check(TokenType::RightBrace) {
+            let field_name= self.consume(TokenType::Identifier, "Expected field name.")?;
+            self.consume(TokenType::Colon,  "Expected ':' in struct fields after value.")?;
+            let var_type = self.parse_type()?;
+            fields.push((field_name, var_type));
+            if !self.match_token(&[TokenType::Comma]){break}
+        }
+        self.consume(TokenType::RightBrace, "Expected '}' in struct statement.")?;
+        return Ok(Stmt::Struct { name, fields })
+    }
+
+    // impl
+
+    fn impl_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let name = self.consume(TokenType::Identifier, "No identifier for the impl specified.")?;
+        self.consume(TokenType::LeftBrace, "Expected '{' in impl statement.")?;
+
+        let mut methods = vec![];
+        while !self.check(TokenType::RightBrace) {
+            self.consume(TokenType::Func, "Expected method in impl.")?;
+            methods.push(self.func_declaration()?);
+        }
+        self.consume(TokenType::RightBrace, "Expected '}' in impl statement.")?;
+        return Ok(Stmt::Impl { name, methods })
+    }
+
+    // enum
+
+    fn enum_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let name = self.consume(TokenType::Identifier, "No identifier for the enum specified.")?;
+
+        self.consume(TokenType::LeftBrace, "Expected '{' in enum statement.")?;
+
+        let mut variants = vec![];
+        while !self.check(TokenType::RightBrace) {
+            let var_name = self.consume(TokenType::Identifier, "Expected variants in enum.")?;
+            variants.push(var_name);
+            if !self.match_token(&[TokenType::Comma]){break}
+        }
+
+        self.consume(TokenType::RightBrace, "Expected '}' in enum statement.")?;
+
+        return Ok(Stmt::Enum { name, variants });
+    }
+
     // else: expression
 
     fn expression_statement(&mut self) -> Result<Stmt, ParseError> {
         let expr: Expr = self.expression()?;
+        if self.match_token(&[TokenType::Equal]) {
+            let value = self.expression()?;
+            match expr {
+                Expr::Variable {..} | Expr::Get {..} => {
+                    self.consume(TokenType::Semicolon, "Expected ';' after value.")?;
+                    return Ok(Stmt::Assign { target: Box::new(expr), value: Box::new(value) })
+                }
+                _ => return Err(ParseError {
+                    span: 0..0,
+                    message: "Invalid assignment target.".to_string()
+                })
+            }
+        }
         self.consume(TokenType::Semicolon, "Expected ';' after value.")?;
         return Ok(Stmt::Expression { value: Box::new(expr) });
     }
@@ -470,11 +549,11 @@ impl Parser {
     // ! -- the guts and other details of the parser --
 
     fn assignment_core(&mut self) -> Result<Stmt, ParseError> {
-        let name: Token = self.consume(TokenType::Identifier, "Existing variable name expected.")?;
+        let target: Expr = self.expression()?;
     
         self.consume(TokenType::Equal, "Equality sign missing.")?;
         let value: Expr = self.expression()?;
-        return Ok(Stmt::Assign {  name, value: Box::new( value ) })
+        return Ok(Stmt::Assign { target: Box::new(target), value: Box::new( value ) })
     }
 
     fn peek(&self) -> &Token {
@@ -536,7 +615,8 @@ impl Parser {
             return Ok(VarType::Char)
         } else if self.match_token(&[TokenType::BoolType]) {
             return Ok(VarType::Bool)
-            
+        } else if self.match_token(&[TokenType::Identifier]) { 
+            return Ok(VarType::Named(self.previous().clone()))
             // todo
         // } if self.match_token(&[TokenType::ArrType]) {
  
@@ -563,7 +643,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+use super::*;
     use crate::lexer::Lexer;
     fn parse_source(src: &str) -> Vec<Stmt> {
         let mut lexer = Lexer::new(src  .to_string());
@@ -745,4 +825,129 @@ mod tests {
         assert!(matches!(stmt[0], Stmt::Class { .. }));
     }
 
+    #[test]
+    fn test_struct() {
+        let mut lexer = Lexer::new("struct Point { x: int, y: int }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Struct {fields, .. } => {
+                assert_eq!(fields.len(), 2)
+            }
+            _ => panic!("Expected struct statement.")
+        }
+    }
+
+    #[test]
+    fn test_struct_type() {
+        let mut lexer = Lexer::new("struct Circle { xy: Point }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+           Stmt::Struct {fields, .. } => {
+                assert_eq!(fields.len(), 1);
+                let (t, v) = &fields[0];
+                match v {
+                    VarType::Named(tok) => assert_eq!(tok.lexeme, "Point"),
+                    _ => panic!("Wrong type.")
+                }
+                assert_eq!(t.lexeme, "xy")
+            }
+           _ => panic!("Expected struct statement.")
+        }
+    }
+
+    #[test]
+    fn test_trailing_comma() {
+        let mut lexer = Lexer::new("struct Point { x: int, }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Struct {fields, .. } => {
+                assert_eq!(fields.len(), 1);
+            }
+            _ => panic!("Expected struct statement.")
+        }
+    }
+
+    #[test]
+    fn test_struct_none() {
+        let mut lexer = Lexer::new("struct Point { }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Struct {fields, .. } => {
+                assert_eq!(fields.len(), 0);
+            }
+            _ => panic!("Expected struct statement.")
+        }
+    }
+
+    #[test]
+    fn test_struct_colon() {
+        let mut lexer = Lexer::new("struct Clang { cpp Language }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        match stmt {
+            Err(e) => assert!(e.message.contains("Expected ':' in struct fields after value.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_enum() {
+        let mut lexer = Lexer::new("enum Color { Red, Green, Blue }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Enum { variants, .. } => {
+                assert_eq!(variants.len(), 3)
+            }
+            _ => panic!("Expected enum statement.")
+        }
+    }
+
+    #[test]
+    fn test_enum_type_err() {
+        let mut lexer = Lexer::new("enum Clang { cpp: Language, }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        match stmt {
+            Err(e) => assert!(e.message.contains("Expected '}' in enum statement.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_impl() {
+        let mut lexer = Lexer::new("impl Dog { fn bark() -> int { print(\"bark\"); return 0; } }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Impl { methods, .. } => {
+                assert_eq!(methods.len(), 1);
+            }
+            _ => panic!("Expected struct statement.")
+        }
+    }
+
+    #[test]
+    fn test_impl_method_err() {
+        let mut lexer = Lexer::new("impl Error { let const x: int = 5; }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        match stmt {
+            Err(e) => assert!(e.message.contains("Expected method in impl.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
 }

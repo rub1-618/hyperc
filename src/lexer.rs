@@ -63,6 +63,9 @@ impl Lexer {
             "from" => TokenType::From,
             "const" => TokenType::Const,
             "struct" => TokenType::Struct,
+            "impl" => TokenType::Impl,
+            "enum" => TokenType::Enum,
+            "mutp" => TokenType::Mutp,
             "mut" => TokenType::Mut,
             "int" => TokenType::IntType,
             "float" => TokenType::FloatType,
@@ -87,7 +90,6 @@ impl Lexer {
             ']' => Ok(self.add_token(TokenType::RightBracket)),
             ',' => Ok(self.add_token(TokenType::Comma)),
             '.' => Ok(self.add_token(TokenType::Dot)),
-            ':' => Ok(self.add_token(TokenType::Colon)),
             ';' => Ok(self.add_token(TokenType::Semicolon)),
 
             '!' => {
@@ -196,6 +198,12 @@ impl Lexer {
                     )
                 }
             }
+            
+            ':' => if self.match_next(':') {
+                    Ok(self.add_token(TokenType::ColonColon))
+                } else {
+                    Ok(self.add_token(TokenType::Colon))
+                },
 
             ' ' | '\r' | '\t' => Ok({}),
 
@@ -421,7 +429,36 @@ mod tests {
         let mut lexer = Lexer::new("// _comment //".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Eof);
-        
+    }
+
+    #[test]
+    fn test_struct() {
+        let mut lexer = Lexer::new("struct".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        assert_eq!(tokens[0].token_type, TokenType::Struct);
+    }
+
+    #[test]
+    fn test_colon() {
+        let mut lexer = Lexer::new("let x: int;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        assert_eq!(tokens[2].token_type, TokenType::Colon);
+    }
+
+    #[test]
+    fn test_colon_colon() {
+        let mut lexer = Lexer::new("Color::Red".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        assert_eq!(tokens[0].token_type, TokenType::Identifier);
+        assert_eq!(tokens[1].token_type, TokenType::ColonColon);
+        assert_eq!(tokens[2].token_type, TokenType::Identifier);
+    }
+
+    #[test]
+    fn test_mutp() {
+        let mut lexer = Lexer::new("mutp".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        assert_eq!(tokens[0].token_type, TokenType::Mutp);
     }
 
     #[test]

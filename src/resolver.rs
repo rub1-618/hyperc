@@ -11,16 +11,28 @@ pub struct Binding {
     var_type: VarType, // todo
 }
 
+#[derive(Debug, Clone)]
+pub enum TypeInfo {
+    Struct {
+        fields: HashMap<String, VarType>,
+    },
+
+    Enum {
+        variants: Vec<String>,
+    },
+}
+
 // ! -- resolver --
 #[derive(Debug, Clone)]
 pub struct Resolver {
     scopes: Vec<HashMap<String, Binding>>,
+    types: HashMap<String, TypeInfo>,
 }
 
 impl Resolver {
 
     pub fn new() -> Self {
-        Self { scopes: Vec::new() }
+        Self { scopes: Vec::new(), types: HashMap::new() }
     }
 
     pub fn resolve(&mut self, statements: &[Stmt]) -> Result<(), ParseError>  {
@@ -33,19 +45,19 @@ impl Resolver {
                         has_main = true;
                     }
                     self.resolve_stmt(statement)?;
-                },
-                Stmt::Class { .. } => {
-                    self.resolve_stmt(statement)?;
-                },
+                }
+                // // Stmt::Class { .. } => { self.resolve_stmt(statement)?; }
+                Stmt::Struct { .. } | Stmt::Impl { .. } |
+                Stmt::Enum { .. } => { self.resolve_stmt(statement)?; }
                 _ => return Err(ParseError { 
                     span: Self::stmt_span(statement),
-                    message: "Only functions and classes are top-level-supported.".to_string() 
+                    message: "Only functions, structs, impls and enums are top-level-supported.".to_string() 
                 })
             }
         }
         if !has_main {
             return Err(ParseError { 
-                    span: 0..0,
+                    span: 0..0, // ok
                     message: "'main' function not found.".to_string() 
                 })
         }
@@ -65,26 +77,41 @@ impl Resolver {
 
             Stmt::Let { name, value , kind, var_type} => {
                 self.declare(name, kind.clone(), var_type.clone())?;
+                self.check_type_exists(var_type)?;
                 self.resolve_expr(value)?;
                 self.define(name);
                 Ok(())
             },
 
-            Stmt::Assign { name, value } => {
-                self.resolve_local(name)?;
-                match self.lookup_binding(name) {
-                    Some(b) => {
-                        if b.kind == VarKind::Const {
-                            return Err(ParseError { 
-                                span: name.start..name.end,
-                                 message: "Cannot redeclare const variable.".to_string() 
-                            })
-                        }
-                    }
-                    None => {}
-                }
+            Stmt::Assign { target, value } => {
                 self.resolve_expr(value)?;
-                Ok(())
+                match &**target {
+                    Expr::Variable { name } => {
+                        match self.lookup_binding(name) {
+                            Some(b) => {
+                                if b.kind == VarKind::Const {
+                                    return Err(ParseError { 
+                                        span: name.start..name.end,
+                                        message: "Cannot assign to const variable.".to_string() 
+                                    })
+                                }
+                            }
+                            None => { return Err(ParseError { 
+                                span: name.start..name.end,
+                                message: "Variable not found.".to_string() 
+                            })}
+                        }
+                        
+                        Ok(())
+                    }
+
+                    Expr::Get { object, .. } => {
+                        self.resolve_expr(object)?;
+                        Ok(())
+                    }
+
+                    _ => unreachable!()
+                }
             },
 
             Stmt::Block { statements } => {
@@ -128,10 +155,16 @@ impl Resolver {
                 Ok(())
             },
 
-            Stmt::Function { name, params, statements, return_type: _ } => {
+            Stmt::Function { name, params, statements, return_type } => {
                 self.fc_declare(name)?;
                 self.define(name);
+                if let Some(rt) = return_type {
+                    self.check_type_exists(rt)?;
+                }
                 self.begin_scope();
+                for (.., v) in params {
+                    self.check_type_exists(v)?;
+                }
                 let result = ( || {
                     for param in params {
                         self.fc_declare(&param.0)?;
@@ -159,6 +192,81 @@ impl Resolver {
                 })();
                 self.end_scope();
                 result
+            },
+
+            Stmt::Struct { name, fields } => {
+                if self.types.contains_key(&name.lexeme) {
+                    return Err(ParseError {
+                        span: name.start..name.end, 
+                        message: "This type is already declared.".to_string()
+                    });
+                }
+
+                let mut field_hash: HashMap<String, VarType> = HashMap::new();
+                for (t, v) in fields {
+                    if let VarType::Named(tok) = v {
+                        if tok.lexeme == name.lexeme {
+                            return Err(ParseError { 
+                                span: tok.start..tok.end, 
+                                message: "Recursive type is not allowed in v0.2.".to_string()
+                            });
+                        }
+
+                        if !self.types.contains_key(&tok.lexeme) {
+                            return Err(ParseError { 
+                                span: tok.start..tok.end, 
+                                message: "Type not found.".to_string()
+                            });
+                        }
+
+                    }
+                    
+                    if field_hash.contains_key(&t.lexeme) {
+                        return Err(ParseError { 
+                            span: t.start..t.end,
+                            message: "This field is already declared.".to_string()
+                        })
+                    }
+                    field_hash.insert(t.lexeme.clone(), v.clone());
+                }
+                self.types.insert(name.lexeme.clone(), TypeInfo::Struct { fields: field_hash });
+                Ok(())
+            },
+
+            Stmt::Impl { name, methods } => {
+                if !self.types.contains_key(&name.lexeme) {
+                    return Err(ParseError {
+                        span: name.start..name.end, 
+                        message: "Type not found.".to_string()
+                    });
+                }
+
+                for method in methods {
+                    self.resolve_stmt(method)?;
+                }
+                Ok(())
+            },
+
+            Stmt::Enum { name, variants } => {
+                if self.types.contains_key(&name.lexeme) {
+                    return Err(ParseError {
+                        span: name.start..name.end, 
+                        message: "This type is already declared.".to_string()
+                    });
+                }
+
+                let mut var_vec: Vec<String> = vec![];
+                for var in variants {
+                    if var_vec.contains(&var.lexeme) {
+                        return Err(ParseError { 
+                            span: var.start..var.end, 
+                            message: "This variant is already declared.".to_string()
+                        })
+                    }
+                    var_vec.push(var.lexeme.clone());
+                }
+                self.types.insert(name.lexeme.clone(), TypeInfo::Enum { variants: var_vec });
+                Ok(())
             },
         }
     }
@@ -248,9 +356,9 @@ impl Resolver {
 
     fn stmt_span(stmt: &Stmt) -> Range<usize> {
         match stmt {
-            Stmt::Let { name, .. } => {name.start..name.end},
-            Stmt::Assign { name, .. } => {name.start..name.end},
-            Stmt::Expression { value } => {Self::expr_span(value)},
+            Stmt::Let { name, .. } => name.start..name.end,
+            Stmt::Assign { target, .. } => Self::expr_span(target),
+            Stmt::Expression { value } => Self::expr_span(value),
             _ => {0..0},
         }
     }
@@ -263,6 +371,9 @@ impl Resolver {
             Expr::Variable { name } => name.start..name.end,
             Expr::Literal { span, .. } => span.clone(),
             Expr::Grouping { expr } => Self::expr_span(expr),
+            Expr::StructLit { name, .. } => name.start..name.end,
+            Expr::Get {  field, .. } => field.start..field.end,
+            Expr::Path { type_name, .. } => type_name.start..type_name.end,
         }
     }
 
@@ -282,6 +393,20 @@ impl Resolver {
         self.scopes.pop();
     }
 
+    fn check_type_exists(&self, var_type: &VarType) -> Result<(), ParseError> {
+        if let VarType::Named(tok) = var_type {
+            if self.types.contains_key(&tok.lexeme) {  
+                Ok(())  
+            } else {
+                return Err(ParseError { 
+                    span: tok.start..tok.end, 
+                    message: "Type not found.".to_string() 
+                });
+            }
+        } else {
+            Ok(())
+        }
+    }
     
     fn resolve_stmts(&mut self, stmts: &[Stmt]) -> Result<(), ParseError> {
         self.begin_scope();
@@ -455,6 +580,10 @@ mod tests {
         let mut _parser = Parser::new(_tokens.clone());
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve_stmts(&stmts).is_err() );
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Cannot assign to const variable.")),
+            Ok (()) => panic!("Expected error.")
+        }
     }
 }

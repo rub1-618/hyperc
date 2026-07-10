@@ -195,6 +195,8 @@ impl <'ctx>Codegen<'ctx> {
                 })?;
                 Ok(self.builder.build_load(ty, ptr, &name.lexeme)?)
             }
+
+            _ => todo!()
         }
     }
 
@@ -242,14 +244,28 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(())
             }
 
-            Stmt::Assign { name, value } => {
-                let (ptr, ..) = *self.variables.get(&name.lexeme).ok_or_else(|| CompileError{
-                    span: name.start..name.end,
-                    message: "Failed getting a pointer for assign statement.".to_string()
-                })?;
-                let result = self.compile_expr(value)?;
-                self.builder.build_store(ptr, result)?;
-                Ok(())
+            Stmt::Assign { target, value } => {
+                match &**target {
+                    Expr::Variable { name } => {
+                        let (ptr, ..) = *self.variables.get(&name.lexeme).ok_or_else(|| CompileError{
+                            span: name.start..name.end,
+                            message: "Failed getting a pointer for assign statement.".to_string()
+                        })?;
+                        let result = self.compile_expr(value)?;
+                        self.builder.build_store(ptr, result)?;
+                        Ok(())
+                    }
+
+                    Expr::Get { field, .. } => {
+                        return Err(CompileError { 
+                            span: field.start..field.end, 
+                            message: "Field assignment is not supported yet.".to_string() 
+                        })
+                    }
+
+                    _ => unreachable!()
+                }
+                
             }
 
             Stmt::Block { statements } => {
