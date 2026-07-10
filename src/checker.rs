@@ -463,13 +463,6 @@ impl TypeChecker {
                 result
             }
 
-            Stmt::Class {  methods, .. } => {
-                for method in methods {
-                    self.check_stmt(method)?;
-                }
-                Ok(())
-            }
-
             Stmt::Struct { name, fields } => {
                 Ok(())
             }
@@ -719,17 +712,6 @@ mod tests {
     fn test_fn_ret_err() {
         assert!(check_source("fn foo() -> int { return \"5\"; }").is_err())
     }
-
-    #[test]
-    fn test_class() {
-        assert!(check_source("class Dog {}").is_ok())
-    }
-
-    #[test]
-    fn test_class_err() {
-        assert!(check_source("class Dog { fn foo () -> int { return \"x\"; } }").is_err())
-    }
-
 
     #[test]
     fn test_call_arg_num_err() {

@@ -46,7 +46,6 @@ impl Resolver {
                     }
                     self.resolve_stmt(statement)?;
                 }
-                // // Stmt::Class { .. } => { self.resolve_stmt(statement)?; }
                 Stmt::Struct { .. } | Stmt::Impl { .. } |
                 Stmt::Enum { .. } => { self.resolve_stmt(statement)?; }
                 _ => return Err(ParseError { 
@@ -171,23 +170,6 @@ impl Resolver {
                         self.define(&param.0);
                     }
                     self.resolve_stmt(statements)?;
-                    Ok(())
-                })();
-                self.end_scope();
-                result
-            },
-
-            Stmt::Class { name, superclass, methods } => {
-                self.fc_declare(name)?;
-                self.define(name);
-                if let Some(sprclss) = superclass {
-                    self.resolve_local(sprclss)?;
-                }
-                self.begin_scope();
-                let result = ( || {
-                    for method in methods {
-                        self.resolve_stmt(method)?;
-                    }
                     Ok(())
                 })();
                 self.end_scope();
@@ -548,16 +530,6 @@ mod tests {
             Ok (()) => panic!("Expected error.")
         }
     }
-
-    #[test]
-    fn test_class() {
-        let mut lexer = Lexer::new("class C { fn foo(){ let mut q: int = 1; } }".to_string());
-        let _tokens = lexer.scan_tokens().unwrap();
-        let mut _parser = Parser::new(_tokens.clone());
-        let stmts = _parser.parse().unwrap();
-        let mut _resolver = resolver::Resolver::new();
-        assert!(_resolver.resolve_stmts(&stmts).is_ok() );
-    } 
 
     #[test]
     fn test_block_self_ref() {

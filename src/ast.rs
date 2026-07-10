@@ -105,12 +105,6 @@ pub enum Stmt {
         return_type: Option<VarType>,
     },
 
-    Class {
-        name: Token,
-        superclass: Option<Token>,
-        methods: Vec<Stmt>,
-    },
-
     Struct {
         name: Token,
         fields: Vec<(Token, VarType)>,

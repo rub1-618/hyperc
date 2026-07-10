@@ -262,19 +262,19 @@ impl Parser {
             return Ok(self.func_declaration()?)
         }
 
-        // class
-
-        if self.match_token(&[TokenType::Class]) {
-            return Ok(self.class_declaration()?)
-        }
+        // struct
 
         if self.match_token(&[TokenType::Struct]) {
             return Ok(self.struct_declaration()?)
         }
 
+        // impl
+
         if self.match_token(&[TokenType::Impl]) {
             return Ok(self.impl_declaration()?)
         }
+
+        // enum
 
         if self.match_token(&[TokenType::Enum]) {
             return Ok(self.enum_declaration()?)
@@ -448,30 +448,6 @@ impl Parser {
         self.consume(TokenType::LeftBrace, "Expected '{' in function body.")?;
         let statements = Box::new(self.block_statement()?);
         return Ok(Stmt::Function { name, params, statements, return_type })
-    }
-
-    // class
-
-    fn class_declaration(&mut self) -> Result<Stmt, ParseError> {
-        let name = self.consume(TokenType::Identifier, "No identifier for the class specified.")?;
-        let superclass = if self.match_token(&[TokenType::LeftParen]) {
-            let sc = self.consume(TokenType::Identifier, "Expected value in function params after ','")?;
-            self.consume(TokenType::RightParen, "Expected ')' after superclass identifier.")?;
-            Some(sc)
-        } else {
-            None
-        };
-
-        self.consume(TokenType::LeftBrace, "Expected '{' before class body.")?;
-
-        let mut methods = vec![];
-        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
-            self.consume(TokenType::Func, "Expected 'func' before the method identifier.")?;
-            methods.push(self.func_declaration()?);
-        }
-
-        self.consume(TokenType::RightBrace, "Expected '}' after class body.")?;
-        return Ok(Stmt::Class { name, superclass, methods })
     }
 
     // struct
@@ -805,24 +781,6 @@ use super::*;
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(stmt[0], Stmt::Return { .. }));
-    }
-
-    #[test]
-    fn test_class() {
-        let mut lexer = Lexer::new("class Dog (Animal) { fn bark() { print(\"bark\"); } }".to_string());
-        let tokens = lexer.scan_tokens().unwrap();
-        let mut _parser = Parser::new(tokens.clone());
-        let stmt = _parser.parse().unwrap();
-        assert!(matches!(stmt[0], Stmt::Class { .. }));
-    }
-
-    #[test]
-    fn test_stacked() {
-        let mut lexer = Lexer::new("class Dog (Animal) { fn bark() { let mut a: str = \"meow\"; a = \"bark\"; print( a ); } }".to_string());
-        let tokens = lexer.scan_tokens().unwrap();
-        let mut _parser = Parser::new(tokens.clone());
-        let stmt = _parser.parse().unwrap();
-        assert!(matches!(stmt[0], Stmt::Class { .. }));
     }
 
     #[test]

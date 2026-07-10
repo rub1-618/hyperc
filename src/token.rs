@@ -22,7 +22,7 @@ pub enum TokenType {
     Identifier, StringLit, CharLit, IntLit, FloatLit, 
 
     // Keywords
-    And, Or, Class, If, Elif, Else, True, False,                    // | && | || | class(){} | if(){} | elif(){} | else{} | true | false |
+    And, Or, If, Elif, Else, True, False,                    // | && | || | if(){} | elif(){} | else{} | true | false |
     For, While, Func, Null, Print, Return, This, Let,               // | for(){} | while(){} | func(){} | null | print() | return ... | this | let |
     Break, Continue, Import, From, Struct, Enum, Impl,              // | break | continue | import ... | import ... from ... | const ... | struct{} | enum | impl |
 

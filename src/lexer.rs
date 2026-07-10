@@ -43,7 +43,6 @@ impl Lexer {
         let text = &self.source[self.start..self.current];
         let token_type = match text {
 
-            "class" => TokenType::Class,
             "if" => TokenType::If,
             "elif" => TokenType::Elif,
             "else" => TokenType::Else,
@@ -356,10 +355,6 @@ mod tests {
         let mut lexer = Lexer::new("let".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Let);
-
-        let mut lexer = Lexer::new("class".to_string());
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].token_type, TokenType::Class);
 
         let mut lexer = Lexer::new("break".to_string());
         let tokens = lexer.scan_tokens().unwrap();
