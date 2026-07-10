@@ -1,4 +1,4 @@
-use inkwell::llvm_sys::target_machine;
+use inkwell::llvm_sys::{object, target_machine};
 
 use crate::error::{ParseError};
 use crate::token::TokenType::Enum;
@@ -140,10 +140,17 @@ impl Parser {
         loop {
             if self.match_token(&[TokenType::LeftParen]) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_token(&[TokenType::Dot]) {
+                expr = self.finish_get(expr)?;
             } else { break; }
         }
 
         Ok(expr)
+    }
+
+    fn finish_get(&mut self, expr: Expr) -> Result<Expr, ParseError> {
+        let field = self.consume(TokenType::Identifier, "Expected an identifier after '.'.")?;
+        Ok(Expr::Get { object: Box::new(expr), field })
     }
 
     fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
@@ -189,7 +196,27 @@ impl Parser {
         }
 
         if self.match_token(&[TokenType::Identifier]) {
-            return Ok(Expr::Variable { name: self.previous().clone() })
+            if self.check(TokenType::LeftBrace) {
+                let name = self.previous().clone();
+                let mut fields: Vec<(Token, Box<Expr>)> = vec![];
+                self.consume(TokenType::LeftBrace, "Expected '{' in struct literal expression.")?;
+                while !self.check(TokenType::RightBrace) {
+                    let field_name= self.consume(TokenType::Identifier, "Expected field name.")?;
+                    self.consume(TokenType::Colon,  "Expected ':' in struct fields after value.")?;
+                    let expr = self.expression()?;
+                    fields.push((field_name, Box::new(expr)));
+                    if !self.match_token(&[TokenType::Comma]){break}
+                }
+                self.consume(TokenType::RightBrace, "Expected '}' in struct literal expression.")?;
+                return Ok(Expr::StructLit { name, fields })
+            } else if self.check(TokenType::ColonColon) {
+                let type_name = self.previous().clone();
+                self.consume(TokenType::ColonColon, "Expected '::' in path expression.")?;
+                let item = self.consume(TokenType::Identifier, "Expected identifier after '::'.")?;
+                return Ok(Expr::Path { type_name, item })
+            } else {
+                return Ok(Expr::Variable { name: self.previous().clone() })
+            }
         }
 
         if self.match_token(&[TokenType::LeftParen]) {    
