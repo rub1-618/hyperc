@@ -4,6 +4,7 @@ use std::fs;
 
 use inkwell::context::Context;
 use codegen::Codegen;
+use inkwell::types;
 
 mod lexer;
 mod token;
@@ -53,7 +54,8 @@ fn run(source: &str, path: &str, out_name: &str) {
                     let mut _resolver = resolver::Resolver::new();
                     match _resolver.resolve(&stmts) {
                         Ok(()) => {
-                            let mut _checker = checker::TypeChecker::new();
+                            let types = _resolver.types_to_checker();
+                            let mut _checker = checker::TypeChecker::new(types);
                             match _checker.check(&stmts) {
                                 Ok(()) => {
                                     // println!("{:?}", &stmts);

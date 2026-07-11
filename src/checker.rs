@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, Stmt, LiteralValue, VarType};
+use crate::resolver::{Resolver, TypeInfo};
 use crate::error::TypeError;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,15 +38,18 @@ pub struct FnSig {
     ret: Type,
 }
 
+
+// ! -- checker --
 pub struct TypeChecker {
     scopes: Vec<HashMap<String, Type>>,
     current_return: Option<Type>,
     functions: HashMap<String, FnSig>,
+    types: HashMap<String, TypeInfo>
 }
 
 impl TypeChecker {
-    pub fn new() -> Self {
-        Self { scopes: Vec::new(), current_return: None, functions: HashMap::new() }
+    pub fn new(types: HashMap<String, TypeInfo>) -> Self {
+        Self { scopes: Vec::new(), current_return: None, functions: HashMap::new(), types }
     }
     
     pub fn check(&mut self, statements: &[Stmt]) -> Result<(), TypeError> {
@@ -172,7 +176,7 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Call { callee, arguments, paren: _ } => {
+            Expr::Call { callee, arguments, paren } => { // todo: move to resolver
                 match callee.as_ref() {
                     Expr::Variable { name} => {
                         
@@ -205,7 +209,7 @@ impl TypeChecker {
                     }
 
                     _ => Err(TypeError { 
-                        span: 0..0, 
+                        span: paren.start..paren.end, 
                         message: "Expression is not callable.".to_string(),
                     })
                 }
@@ -236,25 +240,77 @@ impl TypeChecker {
                 }
             }
 
-            Expr::StructLit { name, .. } => {
-                return Err(TypeError { 
-                    span: name.start..name.end, 
-                    message: "Struct literals are not supported yet.".to_string() 
-                });
+            Expr::StructLit { name, fields } => {
+                let schema: HashMap<String, VarType> = match self.types.get(&name.lexeme) {
+                    Some(TypeInfo::Struct { fields }) => fields.clone(),
+                    _ => unreachable!()
+                };
+                
+                if schema.len() != fields.len() {
+                    return Err(TypeError { 
+                        span: name.start..name.end, 
+                        message: format!("Wrong number of fields in struct literal. Expected: {}, got: {}.", schema.len(), fields.len())
+                    });
+                }
+                for (tok, expr) in fields {
+                    match schema.get(&tok.lexeme) {
+                        Some(vt) => {
+                            let expected = Self::vartype_to_type(vt);
+                            let got = self.infer(expr)?;
+                            if expected != got {
+                                return Err(TypeError { 
+                                    span: tok.start..tok.end,
+                                    message: format!("Mismatched types. Expected: {}, got: {}.", expected, got)
+                                })
+                            }
+                        }
+                        None => {return Err(TypeError { 
+                            span: tok.start..tok.end,
+                            message: "Unknown field.".to_string()
+                            })
+                        }
+                    }
+                }
+                Ok(Type::Named(name.lexeme.clone()))
             }
 
-            Expr::Get {  field, .. } => {
-                return Err(TypeError { 
-                    span: field.start..field.end, 
-                    message: "Field access is not supported yet.".to_string()
-                })
+            Expr::Get {  field, object } => {
+                let ty = self.infer(object)?;
+                match ty {
+                    Type::Named(n) => {
+                        match self.types.get(&n) {
+                            Some(TypeInfo::Struct { fields }) => {
+                                match fields.get(&field.lexeme) {
+                                    Some(vt) => {
+                                        return Ok(Self::vartype_to_type(vt))
+                                    }
+
+                                    None => {return Err(TypeError { 
+                                        span: field.start..field.end,
+                                        message: "Unknown field.".to_string()
+                                    })}
+                                }
+                            }
+                            Some(TypeInfo::Enum { .. }) => {return Err(TypeError { 
+                                span: field.start..field.end, 
+                                message: format!("Type {} has no fields, only variants.", n)
+                            })}
+                            None => {return Err(TypeError { 
+                                span: field.start..field.end,
+                                message: "Unknown type.".to_string()
+                            })}
+                        }
+                    }
+
+                    _ => {return Err(TypeError { 
+                        span: field.start..field.end, 
+                        message: format!("Type {} has no fields.", ty)
+                    })}
+                }
             }
 
             Expr::Path { type_name, .. } => {
-                return Err(TypeError { 
-                    span: type_name.start..type_name.end, 
-                    message: "Paths are not supported yet.".to_string()
-                })
+                Ok(Type::Named(type_name.lexeme.clone()))
             }
         }
     }
@@ -285,7 +341,7 @@ impl TypeChecker {
                 } else {
                     return Err(TypeError { 
                                 span: name.start..name.end, 
-                                message: format!("Mismatched type. Got: {}, expected: {}.", ty, expected)
+                                message: format!("Mismatched types. Expected: {}, got: {}.", expected, ty)
                             })
                 }
             }
@@ -306,16 +362,21 @@ impl TypeChecker {
                         } else {
                             return Err(TypeError { 
                                 span: name.start..name.end, 
-                                message: format!("Mismatched type. Got: {}, expected: {}.", ty, expected)
+                                message: format!("Mismatched types. Expected: {}, got: {}.", expected, ty)
                             })
                         }
                     }
 
-                    Expr::Get { object, field } => {
-                        return Err(TypeError { 
-                            span: field.start..field.end, 
-                            message: "Field assignment is not supported yet.".to_string()
-                        });
+                    Expr::Get { field, .. } => {
+                        let expected = self.infer(target)?;
+                        let got = self.infer(value)?;
+                        if expected !=  got {
+                            return Err(TypeError { 
+                                span: field.start..field.end, 
+                                message: format!("Mismatched types. Expected: {}, got: {}.", expected, got)
+                            })
+                        }
+                        Ok(())
                     }
 
                     _ => unreachable!()
@@ -558,7 +619,10 @@ mod tests {
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());        
         let stmt = _parser.parse().unwrap();
-        let mut _infer = TypeChecker::new();
+        let mut resolver = Resolver::new();
+        resolver.resolve_stmts(&stmt).unwrap();
+        let types = resolver.types_to_checker();
+        let mut _infer = TypeChecker::new(types);
         if let Stmt::Expression { value } = &stmt[0] {
             _infer.infer(value)
         } else { panic!("Expected expression statement."); }
@@ -569,7 +633,10 @@ mod tests {
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());        
         let stmt = _parser.parse().unwrap();
-        let mut _infer = TypeChecker::new();
+        let mut resolver = Resolver::new();
+        resolver.resolve_stmts(&stmt).unwrap();
+        let types = resolver.types_to_checker();
+        let mut _infer = TypeChecker::new(types);
         _infer.check_stmt( &stmt[0])
     }
 
@@ -578,7 +645,10 @@ mod tests {
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());        
         let stmt = _parser.parse().unwrap();
-        let mut _infer = TypeChecker::new();
+        let mut resolver = Resolver::new();
+        resolver.resolve_stmts(&stmt).unwrap();
+        let types = resolver.types_to_checker();
+        let mut _infer = TypeChecker::new(types);
         _infer.check(&stmt)?;
         Ok(())
     }
@@ -719,16 +789,6 @@ mod tests {
     }
 
     #[test]
-    fn test_block_in_block() {
-        assert!(check_all_source(" { let mut x: int = 3; { let const y: int = x; } } ").is_ok())
-    }
-
-    #[test]
-    fn test_block_env_err() {
-        assert!(check_all_source(" { let mut x: int = 3; } let const y: int = x; ").is_err())
-    }
-
-    #[test]
     fn test_range() {
         let result = check_source("if (5) { let mut x: int = 1; }");
         match result {
@@ -739,5 +799,107 @@ mod tests {
             }
             Ok(()) => panic!("Expected error")
         }
+    }
+
+    #[test]
+    fn test_structlit() {
+        assert!(check_all_source("struct P {  } P {  };").is_ok())
+    }
+
+    #[test]
+    fn test_structlit_mismatch_err() {
+        let result = check_all_source("struct P { x: int } let const p: P = P { x: \"hi\" };");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Mismatched types."))
+            }
+            Ok(()) => panic!("Expected error")
+        }
+    }
+
+    #[test]
+    fn test_structlit_field_err() {
+        let result = check_all_source("struct P { x: int } let const p: P = P { z: 5 };");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Unknown field."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_structlit_field_num_err() {
+        let result = check_all_source("struct P { x: int } let const p: P = P {  };");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Wrong number of fields in struct literal."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_structlit_in_structlit() {
+        assert!(check_all_source("struct S { y: int } struct P { x: S } let const p: P = P { x: S { y: 5 } };").is_ok())
+    }
+
+    #[test]
+    fn test_get_in_expr() {
+        assert!(check_all_source("struct S { x: int } let mut y: S = S { x: 10, }; y.x + 1;").is_ok())
+    }
+
+    #[test]
+    fn test_get_mismatch_cond_err() {
+        let result = check_all_source("struct S { x: int } let mut y: S = S { x: 10, }; if (y.x == true) { print(1); }");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Comparison operands must be numeric,"))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_get_fields_err() {
+        let result = check_all_source("struct S { x: int } let mut y: S = S { x: 10, }; y.x.c = 5;");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains(" has no fields."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_get() {
+        assert!(check_all_source("struct S { x: int } let mut y: S = S { x: 10, }; y.x = 5;").is_ok())
+    }
+
+    #[test]
+    fn test_get_mismatch_err() {
+        let result = check_all_source("struct S { x: int } let mut y: S = S { x: 10, }; y.x = true;");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Mismatched types."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_path_get_err() {
+        let result = check_all_source("enum Color {Red, Yellow} Color::Yellow.x;");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains(" has no fields, only variants."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_enum_path() {
+        assert!(check_all_source("enum Color { Red, Green, Blue } let const x: Color = Color::Red;").is_ok())
     }
 }

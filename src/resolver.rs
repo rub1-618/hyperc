@@ -1,5 +1,4 @@
 use crate::error::{ParseError};
-use crate::token::TokenType::{False, True};
 use crate::token::{Token};
 use crate::ast::{Expr, Stmt, VarKind, VarType};
 use std::collections::{HashMap, HashSet};
@@ -22,6 +21,8 @@ pub enum TypeInfo {
         variants: Vec<String>,
     },
 }
+
+
 
 // ! -- resolver --
 #[derive(Debug, Clone)]
@@ -107,6 +108,29 @@ impl Resolver {
 
                     Expr::Get { object, .. } => {
                         self.resolve_expr(object)?;
+                        let root_name: Option<&Token>= Self::root_name(target);
+                        match root_name {
+                            Some(rn) => {
+                                match self.lookup_binding(rn) {
+                                    Some(b) => {
+                                        if b.kind == VarKind::Const {
+                                            return Err(ParseError { 
+                                                span: rn.start..rn.end,
+                                                message: "Cannot assign to const variable.".to_string() 
+                                            })
+                                        }
+                                    }
+                                    None => { return Err(ParseError { 
+                                        span: rn.start..rn.end,
+                                        message: "Variable not found.".to_string() 
+                                    })}
+                                }
+                            }
+                            None => { return Err(ParseError { 
+                                span: Self::expr_span(target),
+                                message: "Invalid assignment target.".to_string() 
+                            })}
+                        }    
                         Ok(())
                     }
 
@@ -454,8 +478,16 @@ impl Resolver {
             Ok(())
         }
     }
+
+    fn root_name(expr: &Expr) -> Option<&Token> {
+        match expr {
+            Expr::Get { object, .. } => Self::root_name(object),
+            Expr::Variable { name } => Some(name),
+            _ => None
+        }
+    }
     
-    fn resolve_stmts(&mut self, stmts: &[Stmt]) -> Result<(), ParseError> {
+    pub fn resolve_stmts(&mut self, stmts: &[Stmt]) -> Result<(), ParseError> {
         self.begin_scope();
         for stmt in stmts {
             self.resolve_stmt(stmt)?;
@@ -463,6 +495,10 @@ impl Resolver {
         self.end_scope();
 
         Ok(())
+    }
+    
+    pub fn types_to_checker(self) -> HashMap<String, TypeInfo> {
+        self.types
     }
 }
 
@@ -532,6 +568,30 @@ mod tests {
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
         assert!(_resolver.resolve_stmts(&stmts).is_ok() );
+    }
+
+    #[test]
+    fn test_block_in_block() {
+        let mut lexer = Lexer::new(" { let mut x: int = 3; { let const y: int = x; } } ".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        assert!(_resolver.resolve_stmts(&stmts).is_ok() );
+    }
+
+    #[test]
+    fn test_block_env_err() {
+        let mut lexer = Lexer::new(" { let mut x: int = 3; } let const y: int = x; ".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Variable not found.")),
+            Ok (()) => panic!("Expected error.")
+        }
     }
 
     #[test]
@@ -704,5 +764,33 @@ mod tests {
         let stmts = _parser.parse().unwrap();
         let mut _resolver = resolver::Resolver::new();
         assert!(_resolver.resolve_stmts(&stmts).is_ok());
+    }
+
+    #[test]
+    fn test_struct_const_err() {
+        let mut lexer = Lexer::new("struct P { x: int } let const p: P = P { x: 5 }; p.x = 4;".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Cannot assign to const variable.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_get_target_err() {
+        let mut lexer = Lexer::new("f().x = 3;".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Invalid assignment target.")),
+            Ok (()) => panic!("Expected error.")
+        }
     }
 }
