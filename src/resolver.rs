@@ -1,7 +1,8 @@
 use crate::error::{ParseError};
+use crate::token::TokenType::{False, True};
 use crate::token::{Token};
 use crate::ast::{Expr, Stmt, VarKind, VarType};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 #[derive(Debug, Clone)]
@@ -275,31 +276,95 @@ impl Resolver {
                     span: name.start..name.end, 
                     message: "Variable not found.".to_string(),
                 })
+            }
+
+            Expr::StructLit { name, fields } => {
+                match self.types.get(&name.lexeme) {
+                    Some(TypeInfo::Enum { .. }) => {
+                        return Err( ParseError { 
+                                span: name.start..name.end, 
+                                message: "Expected struct, found enum.".to_string()
+                            })
+                    }
+                    Some(TypeInfo::Struct { .. }) => {
+                        let mut field_hash: HashSet<String> = HashSet::new();
+                        for (tok, expr) in fields {
+                            match field_hash.insert(tok.lexeme.clone()) {
+                                true => {
+                                    self.resolve_expr(expr)?;
+                                }
+                                false => {
+                                    return Err( ParseError { 
+                                        span: tok.start..tok.end, 
+                                        message: "Field is already set.".to_string()
+                                    })
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                    None => {return Err( ParseError { 
+                        span: name.start..name.end, 
+                        message: "Type not found.".to_string()
+                    })}
                 }
+            }
+
+            Expr::Get { object, .. } => {
+                self.resolve_expr(object)?;
+                Ok(())
+            }
+
+            Expr::Path { type_name, item } => {
+                match self.types.get(&type_name.lexeme) {
+                    Some(TypeInfo::Enum { variants }) => {
+                        if !variants.contains(&item.lexeme) {
+                            return Err( ParseError { 
+                                span: item.start..item.end, 
+                                message: "Variant not found.".to_string() 
+                            })
+                        }
+                        return Ok(());
+                    }
+
+                    Some(TypeInfo::Struct { .. }) => { // todo associated funcs
+                        return Err(ParseError { 
+                            span: item.start..item.end,
+                            message: "Associated functions are not supported in v0.2.".to_string()
+                        })
+                    }
+                    
+                    None => {return Err( ParseError { 
+                        span: type_name.start..type_name.end, 
+                        message: "Type not found.".to_string()
+                    })}
+                }
+            }
+
             _ => Ok(())
         }
     }
     
-    fn resolve_local(&mut self, name: &Token) -> Result<(), ParseError> {
-        for scope in self.scopes.iter().rev() {
-            match scope.get(&name.lexeme) {
-                Some(binding) => {
-                    if !binding.ready {
-                        return Err( ParseError { 
-                            span: name.start..name.end, 
-                            message: "Variable is used in self-declarement.".to_string(),
-                        });
-                    }
-                    return Ok(());
-                }
-                None => {} 
-            }
-        }
-        Err( ParseError { 
-            span: name.start..name.end, 
-            message: "Variable not found.".to_string(),
-        })
-    }
+    // fn resolve_local(&mut self, name: &Token) -> Result<(), ParseError> {
+    //     for scope in self.scopes.iter().rev() {
+    //         match scope.get(&name.lexeme) {
+    //             Some(binding) => {
+    //                 if !binding.ready {
+    //                     return Err( ParseError { 
+    //                         span: name.start..name.end, 
+    //                         message: "Variable is used in self-declarement.".to_string(),
+    //                     });
+    //                 }
+    //                 return Ok(());
+    //             }
+    //             None => {} 
+    //         }
+    //     }
+    //     Err( ParseError { 
+    //         span: name.start..name.end, 
+    //         message: "Variable not found.".to_string(),
+    //     })
+    // }
 
     fn declare(&mut self, name: &Token, kind: VarKind, var_type: VarType) -> Result<(), ParseError> {
         if let Some(scope) = self.scopes.last_mut() {
@@ -557,5 +622,87 @@ mod tests {
             Err (e) => assert!(e.message.contains("Cannot assign to const variable.")),
             Ok (()) => panic!("Expected error.")
         }
+    }
+
+    // !
+
+    #[test]
+    fn test_structlit_unknown_err() {
+        let mut lexer = Lexer::new("let const p: P = P { x: 1 };".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Type not found.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_structlit_enum_err() {
+        let mut lexer = Lexer::new("enum C { cpp } let mut x: C = C { cpp: 1 };".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Expected struct, found enum.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_structlit_field_err() {
+        let mut lexer = Lexer::new("struct P { x: int } let const x: P = P { x: 1, x: 2 };".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Field is already set.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_path_variant_err() {
+        let mut lexer = Lexer::new("enum Color {Red} let mut x: Color = Color::Yellow;".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Variant not found.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_path_struct_err() {
+        let mut lexer = Lexer::new("struct P { x: int } let mut x: P = P::new;".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Associated functions are not supported in v0.2.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_struct() {
+        let mut lexer = Lexer::new("struct P { x: int } let mut p: P = P { x : 1 }; p.x = 5;".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        assert!(_resolver.resolve_stmts(&stmts).is_ok());
     }
 }
