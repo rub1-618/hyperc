@@ -1,5 +1,5 @@
-use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, token::TokenType};
-use std::{iter::Enumerate, path::Path, sync::Arc};
+use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, lexer, token::TokenType};
+use std::{path::Path};
 use std::process::Command;
 use std::collections::HashMap;
 use crate::error::CompileError;
@@ -13,11 +13,9 @@ use inkwell::{
         Target, 
         TargetMachine,
     }, types::{
-        BasicMetadataTypeEnum, 
-        BasicType, 
-        BasicTypeEnum
+        BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType
     }, values::{
-        BasicMetadataValueEnum, BasicValueEnum, FloatValue, IntValue, PointerValue, ValueKind,
+        AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, FloatValue, IntValue, PointerValue, ValueKind,
     },
 };
 
@@ -34,7 +32,8 @@ pub struct Codegen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
-    variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>
+    variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, VarType)>,
+    struct_types: HashMap<String, (StructType<'ctx>, Vec<(String, VarType)>)>,
 }
 
 impl <'ctx>Codegen<'ctx> {
@@ -43,7 +42,8 @@ impl <'ctx>Codegen<'ctx> {
         let module = context.create_module("module");
         let builder = context.create_builder();
         let variables = HashMap::new();
-        Codegen { context, module, builder, variables }
+        let struct_types = HashMap::new();
+        Codegen { context, module, builder, variables, struct_types }
     }
 
     pub fn compile(&mut self, stmts: &[Stmt], path: &str, out_name: &str) -> Result<(), CompileError> {
@@ -189,11 +189,42 @@ impl <'ctx>Codegen<'ctx> {
             }
 
             Expr::Variable { name } => {
-                let (ptr, ty) = *self.variables.get(&name.lexeme).ok_or_else(|| CompileError{
+                let (ptr, ty, _) = *self.variables.get(&name.lexeme).ok_or_else(|| CompileError{
                     span: name.start..name.end,
                     message: format!("Variable undefined: {:?}.", &name.lexeme)
                 })?;
                 Ok(self.builder.build_load(ty, ptr, &name.lexeme)?)
+            }
+
+            Expr::StructLit { name, fields } => {
+                let (mut agg, names) = match self.struct_types.get(&name.lexeme) {
+                    Some((ty, vec)) => {
+                        let agg = ty.get_undef();
+                        let names = vec.clone();
+                        (agg, names)
+                    }
+                    None => return Err(CompileError { 
+                        span: name.start..name.end,
+                        message: "Struct not found.".to_string()
+                    })
+                };
+
+                for (tok, expr) in fields {
+                    let value = self.compile_expr(expr)?;
+                    let pos = names.iter().position(|(n,_)| n == &tok.lexeme).ok_or_else(|| CompileError {
+                        span: tok.start..tok.end,
+                        message: format!("Cannot set position to a field {}", tok.lexeme)
+                    });
+                    let position = pos? as u32;
+                    agg = self.builder.build_insert_value(agg, value, position, &tok.lexeme)?.into_struct_value();
+                }
+                Ok(agg.into())
+            }
+
+            Expr::Get { object, field } => {
+                let (ptr, vt) = self.compile_lvalue(expr)?;
+                let ty = self.var_to_llvm(&vt)?;
+                Ok(self.builder.build_load(ty, ptr, &field.lexeme)?)
             }
 
             _ => todo!()
@@ -208,7 +239,7 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(())
             }
 
-            Stmt::Print { value } => {
+            Stmt::Print { value } => { // todo type printing
                 let i32_type = self.context.i32_type();
                 let ptr = self.context.ptr_type(AddressSpace::default());
                 let fn_type = i32_type.fn_type(&[ptr.into()], true);
@@ -240,7 +271,7 @@ impl <'ctx>Codegen<'ctx> {
                 let ptr = self.builder.build_alloca(ty, &name.lexeme)?;
                 let result = self.compile_expr(value)?;
                 self.builder.build_store(ptr, result)?;
-                self.variables.insert(name.lexeme.clone(), (ptr, ty));
+                self.variables.insert(name.lexeme.clone(), (ptr, ty, var_type.clone()));
                 Ok(())
             }
 
@@ -251,16 +282,16 @@ impl <'ctx>Codegen<'ctx> {
                             span: name.start..name.end,
                             message: "Failed getting a pointer for assign statement.".to_string()
                         })?;
-                        let result = self.compile_expr(value)?;
-                        self.builder.build_store(ptr, result)?;
+                        let value = self.compile_expr(value)?;
+                        self.builder.build_store(ptr, value)?;
                         Ok(())
                     }
 
-                    Expr::Get { field, .. } => {
-                        return Err(CompileError { 
-                            span: field.start..field.end, 
-                            message: "Field assignment is not supported yet.".to_string() 
-                        })
+                    Expr::Get { .. } => {
+                        let (ptr, _) = self.compile_lvalue(target)?;
+                        let value = self.compile_expr(value)?;
+                        self.builder.build_store(ptr, value)?;
+                        Ok(())
                     }
 
                     _ => unreachable!()
@@ -385,6 +416,20 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(())
             }
 
+            Stmt::Struct { name, fields } => {
+                let s_ty = self.context.opaque_struct_type(&name.lexeme);   
+                let mut field_types: Vec<BasicTypeEnum> = vec![];
+                let mut field_vec: Vec<(String, VarType)> = vec![];
+                for (tok, vt) in fields {
+                    let llvm_ty = self.var_to_llvm(&vt)?;
+                    field_types.push(llvm_ty);
+                    field_vec.push((tok.lexeme.clone(), vt.clone()));
+                }
+                s_ty.set_body(&field_types, false);
+                self.struct_types.insert(name.lexeme.clone(), (s_ty, field_vec));
+                Ok(())
+            }
+
             Stmt::Function { name, params, statements, return_type } => {
                 self.compile_function(name, params, statements, return_type)?;
                 Ok(())
@@ -425,7 +470,7 @@ impl <'ctx>Codegen<'ctx> {
             let ptr = self.builder.build_alloca(ty, &name.lexeme)?;
             let result = fn_val.get_nth_param(index).unwrap();
             self.builder.build_store(ptr, result)?;
-            self.variables.insert(name.lexeme.clone(), (ptr, ty));
+            self.variables.insert(name.lexeme.clone(), (ptr, ty, var_type.clone()));
         }
 
         self.compile_stmt(stmts)?;
@@ -614,10 +659,75 @@ impl <'ctx>Codegen<'ctx> {
             VarType::Bool => {
                 Ok(self.context.bool_type().into())
             },
+            VarType::Named(tok) => {
+                match self.struct_types.get(&tok.lexeme) {
+                    Some((sty, _)) => {
+                        let struct_type = *sty;
+                        Ok(struct_type.into())
+                    }
+                    None => return Err(CompileError { 
+                        span: tok.start..tok.end, 
+                        message: "Unknown type.".to_string() 
+                    })  
+                }
+            }
             _ => return Err(CompileError { 
                 span: 0..0, 
                 message: "VarType to LLVM conversion failed.".to_string() 
             })
+        }
+    }
+
+    fn compile_lvalue(&self, expr: &Expr) -> Result<(PointerValue<'ctx>, VarType), CompileError> {
+        match expr {
+            Expr::Variable { name } => {
+                let (ptr, _, vt) = self.variables.get(&name.lexeme).ok_or_else(|| CompileError{
+                    span: name.start..name.end,
+                    message: "Variable undefined.".to_string()
+                })?;
+                Ok((*ptr, vt.clone()))
+            }
+
+            Expr::Get { object, field } => {
+                let (obj_ptr, obj_vt) = self.compile_lvalue(object)?;
+
+                match obj_vt {
+                    VarType::Named(obj_tok) => {
+                        match self.struct_types.get(&obj_tok.lexeme) {
+                            Some((st, fields)) => {
+                                let pos = fields.iter().position(|(n,_)| n == &field.lexeme).ok_or_else(|| CompileError {
+                                        span: field.start..field.end,
+                                        message: "Unknown field.".to_string()
+                                })?;
+                                let position = pos as u32;
+                                let field_ptr = self.builder.build_struct_gep(*st, obj_ptr, position, &field.lexeme)?;
+                                let field_vt = fields[pos].1.clone();
+                                Ok((field_ptr, field_vt))
+                            }
+
+                            None => {
+                                return Err(CompileError { 
+                                    span: obj_tok.start..obj_tok.end, 
+                                    message: "Unknown type.".to_string() 
+                                })
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(CompileError { 
+                            span: field.start..field.end, 
+                            message: "This type has no fields.".to_string() 
+                        })
+                    }
+                }
+            }
+
+            _ => {
+                return Err(CompileError { 
+                    span: 0..0, 
+                    message: "Wrong expression to compile left value.".to_string() 
+                })
+            }
         }
     }
 

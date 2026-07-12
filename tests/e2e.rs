@@ -55,6 +55,12 @@ fn test_func() {
     assert_eq!(cmd_out.status.code(), Some(0));
 }
 
+#[test]
+fn test_struct() {
+    let (cmd_out, std_out) = run_hr("tests/fixtures/test_struct.hr");
+    assert_eq!(std_out, "1\n0\n2.500000\n");
+    assert_eq!(cmd_out.status.code(), Some(0));
+}
 
 #[test]
 fn test_exit_code() {

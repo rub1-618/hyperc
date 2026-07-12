@@ -1,0 +1,19 @@
+struct C {
+    cpp: bool,
+}
+
+struct Point {
+    x: int,
+    y: C,
+    z: float
+}
+
+fn main() -> int {
+    let mut p: Point = Point { x: 1, y: C { cpp: true }, z: 1.5 };
+    print(p.x);
+    p.y = C { cpp: false };
+    print(p.y.cpp);
+    let const k: float = p.z + 1;
+    print(k);
+    return 0;
+}

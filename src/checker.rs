@@ -241,7 +241,7 @@ impl TypeChecker {
             }
 
             Expr::StructLit { name, fields } => {
-                let schema: HashMap<String, VarType> = match self.types.get(&name.lexeme) {
+                let schema: Vec<(String, VarType)> = match self.types.get(&name.lexeme) {
                     Some(TypeInfo::Struct { fields }) => fields.clone(),
                     _ => unreachable!()
                 };
@@ -253,8 +253,8 @@ impl TypeChecker {
                     });
                 }
                 for (tok, expr) in fields {
-                    match schema.get(&tok.lexeme) {
-                        Some(vt) => {
+                    match schema.iter().find(|(n,_)| n == &tok.lexeme) {
+                        Some((_, vt)) => {
                             let expected = Self::vartype_to_type(vt);
                             let got = self.infer(expr)?;
                             if expected != got {
@@ -280,8 +280,8 @@ impl TypeChecker {
                     Type::Named(n) => {
                         match self.types.get(&n) {
                             Some(TypeInfo::Struct { fields }) => {
-                                match fields.get(&field.lexeme) {
-                                    Some(vt) => {
+                                match fields.iter().find(|(n,_)| n == &field.lexeme) {
+                                    Some((_, vt)) => {
                                         return Ok(Self::vartype_to_type(vt))
                                     }
 

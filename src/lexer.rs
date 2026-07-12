@@ -481,6 +481,4 @@ mod tests {
         assert_eq!(tokens[3].token_type, TokenType::True);
         assert_eq!(tokens[4].token_type, TokenType::Semicolon);
     }
-
-
 }

@@ -14,7 +14,7 @@ pub struct Binding {
 #[derive(Debug, Clone)]
 pub enum TypeInfo {
     Struct {
-        fields: HashMap<String, VarType>,
+        fields: Vec<(String, VarType)>,
     },
 
     Enum {
@@ -209,7 +209,7 @@ impl Resolver {
                     });
                 }
 
-                let mut field_hash: HashMap<String, VarType> = HashMap::new();
+                let mut field_vec: Vec<(String, VarType)> = vec![];
                 for (t, v) in fields {
                     if let VarType::Named(tok) = v {
                         if tok.lexeme == name.lexeme {
@@ -228,15 +228,15 @@ impl Resolver {
 
                     }
                     
-                    if field_hash.contains_key(&t.lexeme) {
+                    if field_vec.iter().any(|(n,_)| n == &t.lexeme) {
                         return Err(ParseError { 
                             span: t.start..t.end,
                             message: "This field is already declared.".to_string()
                         })
                     }
-                    field_hash.insert(t.lexeme.clone(), v.clone());
+                    field_vec.push((t.lexeme.clone(), v.clone()));
                 }
-                self.types.insert(name.lexeme.clone(), TypeInfo::Struct { fields: field_hash });
+                self.types.insert(name.lexeme.clone(), TypeInfo::Struct { fields: field_vec });
                 Ok(())
             },
 
