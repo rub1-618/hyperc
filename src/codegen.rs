@@ -95,7 +95,7 @@ impl <'ctx>Codegen<'ctx> {
                     // todo LiteralValue::Null() => {}
                     _ => return Err(CompileError { 
                         span: 0..0, 
-                        message: format!("Literal: {:?}, is not supported in v0.1.", value) 
+                        message: format!("Literal: {:?}, is not supported in v0.2.", value) 
                     })
                 }
             },
@@ -225,6 +225,13 @@ impl <'ctx>Codegen<'ctx> {
                 let (ptr, vt) = self.compile_lvalue(expr)?;
                 let ty = self.var_to_llvm(&vt)?;
                 Ok(self.builder.build_load(ty, ptr, &field.lexeme)?)
+            }
+
+            Expr::SelfExpr { self_tok } => {
+                Err(CompileError { 
+                    span: self_tok.start..self_tok.end, 
+                    message: "Methods are not supported yet.".to_string() 
+                })
             }
 
             _ => todo!()
@@ -720,6 +727,13 @@ impl <'ctx>Codegen<'ctx> {
                         })
                     }
                 }
+            }
+
+            Expr::SelfExpr { self_tok } => {
+                Err(CompileError { 
+                    span: self_tok.start..self_tok.end, 
+                    message: "Methods are not supported yet.".to_string() 
+                })
             }
 
             _ => {

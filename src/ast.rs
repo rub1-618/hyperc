@@ -48,6 +48,10 @@ pub enum Expr {
         type_name: Token,
         item: Token,
     },
+
+    SelfExpr {
+        self_tok: Token,
+    }
 }
 
 #[derive(Debug, Clone)]

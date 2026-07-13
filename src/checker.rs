@@ -43,13 +43,14 @@ pub struct FnSig {
 pub struct TypeChecker {
     scopes: Vec<HashMap<String, Type>>,
     current_return: Option<Type>,
+    current_self_type: Option<Type>,
     functions: HashMap<String, FnSig>,
     types: HashMap<String, TypeInfo>
 }
 
 impl TypeChecker {
     pub fn new(types: HashMap<String, TypeInfo>) -> Self {
-        Self { scopes: Vec::new(), current_return: None, functions: HashMap::new(), types }
+        Self { scopes: Vec::new(), current_return: None, current_self_type: None, functions: HashMap::new(), types }
     }
     
     pub fn check(&mut self, statements: &[Stmt]) -> Result<(), TypeError> {
@@ -312,6 +313,18 @@ impl TypeChecker {
             Expr::Path { type_name, .. } => {
                 Ok(Type::Named(type_name.lexeme.clone()))
             }
+
+            Expr::SelfExpr { self_tok } => {
+                match &self.current_self_type {
+                    Some(expected) => {
+                        Ok(expected.clone())
+                    }
+                    None => return Err(TypeError { 
+                            span: self_tok.start..self_tok.end,
+                            message: "'self' is outside of a method.".to_string() 
+                        })
+                }
+            }
         }
     }
       
@@ -485,57 +498,33 @@ impl TypeChecker {
             }
 
             Stmt::Function { name, params, statements , return_type} => {
-                let prev = self.current_return.take();
-                let prev_fn = match return_type{
-                    Some(vt) => Self::vartype_to_type(vt),
-                    None => Type::Unit,
-                };
-                self.current_return = Some(prev_fn.clone());
-                let mut param_types = vec![];
-                for p in params {
-                    param_types.push(Self::vartype_to_type(&p.1));
-                }
-
-                self.functions.insert( name.lexeme.clone(), FnSig { params: param_types, ret: prev_fn });
-
-                self.begin_scope();
-                let result = ( || {
-                    for param in params {
-                        self.declare(&param.0, Self::vartype_to_type(&param.1))?;
-                    }
-                    self.check_stmt(statements)?;
-                    match return_type {
-                        Some(_) => {
-                            if !Self::always_return(statements) {
-                                return Err(TypeError { 
-                                    span: name.start..name.end,
-                                    message: "Not all paths return.".to_string()
-                                })
-                            }
-                        }
-                        None => ()
-                    }
-
-                    Ok(())
-                } )(); 
-
-                self.end_scope();
-                self.current_return = prev;
-                result
+                self.check_func_body(name, params, statements, return_type, false)?;
+                Ok(())
             }
 
-            Stmt::Struct { name, fields } => {
+            Stmt::Struct { .. } => {
                 Ok(())
             }
 
             Stmt::Impl { name, methods } => {
+                self.current_self_type = Some(Type::Named(name.lexeme.clone()));
                 for method in methods {
-                    self.check_stmt(method)?;
+                    match method {
+                        Stmt::Function { name, params, statements, return_type } => {
+                            self.check_func_body(name, params, statements, return_type, true)?;
+                        }
+
+                        _ => return Err(TypeError { 
+                            span: name.start..name.end,
+                            message: "Expected method.".to_string() 
+                        })
+                    }
                 }
+                self.current_self_type = None;
                 Ok(())
             }
 
-            Stmt::Enum { name, variants } => {
+            Stmt::Enum { .. } => {
                 Ok(())
             }
         }
@@ -546,6 +535,51 @@ impl TypeChecker {
             scope.insert(name.lexeme.clone(), ty );
         }
         Ok(())
+    }
+
+    fn check_func_body(&mut self, name: &Token, params: &Vec<(Token, VarType)>, statements: &Box<Stmt>, 
+    return_type: &Option<VarType>, is_method: bool) -> Result<(), TypeError> {
+        let prev_rt = self.current_return.take();
+        let prev_st = self.current_self_type.take();
+        self.current_self_type = if is_method {
+            prev_st.clone()
+        } else {
+            None
+        };
+        let prev_fn = match return_type{
+            Some(vt) => Self::vartype_to_type(vt),
+            None => Type::Unit,
+        };
+        self.current_return = Some(prev_fn.clone());
+        let mut param_types = vec![];
+        for p in params {
+            param_types.push(Self::vartype_to_type(&p.1));
+        }
+
+        self.functions.insert( name.lexeme.clone(), FnSig { params: param_types, ret: prev_fn });
+        self.begin_scope();
+        let result = ( || {
+            for param in params {
+                self.declare(&param.0, Self::vartype_to_type(&param.1))?;
+            }
+            self.check_stmt(statements)?;
+            match return_type {
+                Some(_) => {
+                    if !Self::always_return(statements) {
+                        return Err(TypeError { 
+                            span: name.start..name.end,
+                            message: "Not all paths return.".to_string()
+                        })
+                    }
+                }
+                None => ()
+            }
+            Ok(())
+        } )(); 
+        self.end_scope();
+        self.current_return = prev_rt;
+        self.current_self_type = prev_st;
+        result
     }
 
     fn always_return(stmt: &Stmt) -> bool {
@@ -586,6 +620,7 @@ impl TypeChecker {
             Expr::StructLit { name, .. } => name.start..name.end,
             Expr::Get { field, .. } => field.start..field.end,
             Expr::Path { type_name, .. } => type_name.start..type_name.end,
+            Expr::SelfExpr { self_tok } => self_tok.start..self_tok.end,
         }
     }
 
@@ -901,5 +936,10 @@ mod tests {
     #[test]
     fn test_enum_path() {
         assert!(check_all_source("enum Color { Red, Green, Blue } let const x: Color = Color::Red;").is_ok())
+    }
+
+    #[test]
+    fn test_self_impl() {
+        assert!(check_all_source("struct S { x: int } impl S { fn foo() -> int { return self.x; } }").is_ok())
     }
 }

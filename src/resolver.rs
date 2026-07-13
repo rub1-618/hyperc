@@ -29,12 +29,13 @@ pub enum TypeInfo {
 pub struct Resolver {
     scopes: Vec<HashMap<String, Binding>>,
     types: HashMap<String, TypeInfo>,
+    in_method: bool,
 }
 
 impl Resolver {
 
     pub fn new() -> Self {
-        Self { scopes: Vec::new(), types: HashMap::new() }
+        Self { scopes: Vec::new(), types: HashMap::new(), in_method: false }
     }
 
     pub fn resolve(&mut self, statements: &[Stmt]) -> Result<(), ParseError>  {
@@ -180,25 +181,8 @@ impl Resolver {
             },
 
             Stmt::Function { name, params, statements, return_type } => {
-                self.fc_declare(name)?;
-                self.define(name);
-                if let Some(rt) = return_type {
-                    self.check_type_exists(rt)?;
-                }
-                self.begin_scope();
-                for (.., v) in params {
-                    self.check_type_exists(v)?;
-                }
-                let result = ( || {
-                    for param in params {
-                        self.fc_declare(&param.0)?;
-                        self.define(&param.0);
-                    }
-                    self.resolve_stmt(statements)?;
-                    Ok(())
-                })();
-                self.end_scope();
-                result
+                self.resolve_func_body(name, params, statements, return_type, false)?;
+                Ok(())
             },
 
             Stmt::Struct { name, fields } => {
@@ -249,7 +233,16 @@ impl Resolver {
                 }
 
                 for method in methods {
-                    self.resolve_stmt(method)?;
+                    match method {
+                        Stmt::Function { name, params, statements, return_type } => {
+                            self.resolve_func_body(name, params, statements, return_type, true)?;
+                        }
+
+                        _ => return Err(ParseError { 
+                            span: name.start..name.end,
+                            message: "Expected method.".to_string() 
+                        })
+                    }
                 }
                 Ok(())
             },
@@ -365,6 +358,17 @@ impl Resolver {
                 }
             }
 
+            Expr::SelfExpr { self_tok } => {
+                if self.in_method {
+                    return Ok(());
+                } else {
+                    return Err( ParseError { 
+                        span: self_tok.start..self_tok.end, 
+                        message: "'self' is outside of a method.".to_string()
+                    })
+                }
+            }
+
             _ => Ok(())
         }
     }
@@ -389,6 +393,32 @@ impl Resolver {
     //         message: "Variable not found.".to_string(),
     //     })
     // }
+
+    fn resolve_func_body(&mut self, name: &Token, params: &Vec<(Token, VarType)>, statements: &Box<Stmt>, 
+    return_type: &Option<VarType>, is_method: bool) -> Result<(), ParseError> {
+        self.fc_declare(name)?;
+        self.define(name);
+        let prev_st = self.in_method;
+        self.in_method = is_method;
+        if let Some(rt) = return_type {
+            self.check_type_exists(rt)?;
+        }
+        self.begin_scope();
+        for (.., v) in params {
+            self.check_type_exists(v)?;
+        }
+        let result = ( || {
+            for param in params {
+                self.fc_declare(&param.0)?;
+                self.define(&param.0);
+            }
+            self.resolve_stmt(statements)?;
+            Ok(())
+        })();
+        self.end_scope();
+        self.in_method = prev_st;
+        result
+    }
 
     fn declare(&mut self, name: &Token, kind: VarKind, var_type: VarType) -> Result<(), ParseError> {
         if let Some(scope) = self.scopes.last_mut() {
@@ -445,6 +475,7 @@ impl Resolver {
             Expr::StructLit { name, .. } => name.start..name.end,
             Expr::Get {  field, .. } => field.start..field.end,
             Expr::Path { type_name, .. } => type_name.start..type_name.end,
+            Expr::SelfExpr { self_tok } => self_tok.start..self_tok.end,
         }
     }
 
@@ -790,6 +821,20 @@ mod tests {
         let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("Invalid assignment target.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_self_out_err() {
+        let mut lexer = Lexer::new("self;".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("'self' is outside of a method.")),
             Ok (()) => panic!("Expected error.")
         }
     }

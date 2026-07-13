@@ -195,6 +195,10 @@ impl Parser {
             return Ok(Expr::Literal { value: LiteralValue::Float(self.previous().lexeme.parse::<f64>().unwrap()), span: self.previous().start..self.previous().end })
         }
 
+        if self.match_token(&[TokenType::SelfKw]) {
+            return Ok(Expr::SelfExpr { self_tok: self.previous().clone()})
+        }
+
         if self.match_token(&[TokenType::Identifier]) {
             if self.check(TokenType::LeftBrace) {
                 let name = self.previous().clone();
@@ -649,7 +653,7 @@ mod tests {
 use core::panic;
 
 use super::*;
-    use crate::lexer::Lexer;
+    use crate::{ast::Expr::SelfExpr, lexer::Lexer};
     fn parse_source(src: &str) -> Vec<Stmt> {
         let mut lexer = Lexer::new(src  .to_string());
         let tokens = lexer.scan_tokens().unwrap();
@@ -1133,5 +1137,14 @@ use super::*;
             Err(e) => assert!(e.message.contains("Expected method in impl.")),
             Ok (_) => panic!("Expected error.")
         }
+    }
+
+    #[test]
+    fn test_self_p() {
+        let mut lexer = Lexer::new("fn foo() -> int { return self.x + 1; }".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        assert!(matches!(&stmt[0], Stmt::Function { .. }));
     }
 }

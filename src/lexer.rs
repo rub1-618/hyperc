@@ -71,7 +71,7 @@ impl Lexer {
             "str" => TokenType::StrType,
             "char" => TokenType::CharType,
             "bool" => TokenType::BoolType,
-
+            "self" => TokenType::SelfKw,
             _ => TokenType::Identifier
 
         };
@@ -454,6 +454,13 @@ mod tests {
         let mut lexer = Lexer::new("mutp".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         assert_eq!(tokens[0].token_type, TokenType::Mutp);
+    }
+
+    #[test]
+    fn test_self_tok() {
+        let mut lexer = Lexer::new("self".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        assert_eq!(tokens[0].token_type, TokenType::SelfKw);
     }
 
     #[test]
