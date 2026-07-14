@@ -838,4 +838,18 @@ mod tests {
             Ok (()) => panic!("Expected error.")
         }
     }
+
+    #[test]
+    fn test_self_recursive_err() {
+        let mut lexer = Lexer::new("struct C { x: int } impl C { fn outer() -> int { fn inner() -> int { return self.x; } return inner(); } }".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("'self' is outside of a method.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
 }

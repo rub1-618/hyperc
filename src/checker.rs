@@ -177,7 +177,7 @@ impl TypeChecker {
                 }
             }
 
-            Expr::Call { callee, arguments, paren } => { // todo: move to resolver
+            Expr::Call { callee, arguments, paren } => {
                 match callee.as_ref() {
                     Expr::Variable { name} => {
                         
@@ -189,7 +189,7 @@ impl TypeChecker {
                             }),
                         };
 
-                        if !(sig.params.len() == arguments.len()) {
+                        if sig.params.len() != arguments.len() {
                             return Err(TypeError { 
                                 span: name.start..name.end, 
                                 message: "Wrong number of arguments.".to_string() 
@@ -207,6 +207,44 @@ impl TypeChecker {
                         }
 
                         Ok(sig.ret) 
+                    }
+
+                    Expr::Get { object, field } => {
+                        match self.infer(object)? {
+                            Type::Named(tok) => {
+                                let result = Self::mangle(&tok, &field.lexeme);
+                                let sig = match self.functions.get(&result) {
+                                    Some(s) => s.clone(),
+                                    None => return Err(TypeError { 
+                                        span: field.start..field.end, 
+                                        message: "Unknown method.".to_string() 
+                                    }),
+                                };
+
+                                if sig.params.len() != arguments.len() {
+                                    return Err(TypeError { 
+                                        span: paren.start..paren.end, 
+                                        message: "Wrong number of arguments.".to_string() 
+                                    });
+                                }
+
+                                for i in 0..arguments.len() {
+                                    let arg_ty = self.infer(&arguments[i])?;
+                                    if arg_ty != sig.params[i] {
+                                        return Err(TypeError { 
+                                            span: field.start..field.end, 
+                                            message: "Argument type mismatched.".to_string() 
+                                        });
+                                    }
+                                }
+                                
+                                Ok(sig.ret)
+                            }
+                            _ => return Err(TypeError { 
+                                    span: field.start..field.end, 
+                                    message: "This type has no fields.".to_string() 
+                                })
+                        }
                     }
 
                     _ => Err(TypeError { 
@@ -498,7 +536,7 @@ impl TypeChecker {
             }
 
             Stmt::Function { name, params, statements , return_type} => {
-                self.check_func_body(name, params, statements, return_type, false)?;
+                self.check_func_body(name, params, statements, return_type, false, None)?;
                 Ok(())
             }
 
@@ -507,11 +545,12 @@ impl TypeChecker {
             }
 
             Stmt::Impl { name, methods } => {
+                let named = name;
                 self.current_self_type = Some(Type::Named(name.lexeme.clone()));
                 for method in methods {
                     match method {
                         Stmt::Function { name, params, statements, return_type } => {
-                            self.check_func_body(name, params, statements, return_type, true)?;
+                            self.check_func_body(name, params, statements, return_type, true, Some(named))?;
                         }
 
                         _ => return Err(TypeError { 
@@ -537,14 +576,22 @@ impl TypeChecker {
         Ok(())
     }
 
+    fn mangle(ty: &str, name: &str) -> String {
+        format!("{}.{}", ty, name)
+    }
+
     fn check_func_body(&mut self, name: &Token, params: &Vec<(Token, VarType)>, statements: &Box<Stmt>, 
-    return_type: &Option<VarType>, is_method: bool) -> Result<(), TypeError> {
+    return_type: &Option<VarType>, is_method: bool, named: Option<&Token> ) -> Result<(), TypeError> {
         let prev_rt = self.current_return.take();
         let prev_st = self.current_self_type.take();
         self.current_self_type = if is_method {
             prev_st.clone()
         } else {
             None
+        };
+        let key_owner = match named {
+            Some(ty) => Self::mangle(&ty.lexeme, &name.lexeme),
+            None => name.lexeme.clone(),
         };
         let prev_fn = match return_type{
             Some(vt) => Self::vartype_to_type(vt),
@@ -555,8 +602,7 @@ impl TypeChecker {
         for p in params {
             param_types.push(Self::vartype_to_type(&p.1));
         }
-
-        self.functions.insert( name.lexeme.clone(), FnSig { params: param_types, ret: prev_fn });
+        self.functions.insert( key_owner, FnSig { params: param_types, ret: prev_fn });
         self.begin_scope();
         let result = ( || {
             for param in params {
@@ -941,5 +987,32 @@ mod tests {
     #[test]
     fn test_self_impl() {
         assert!(check_all_source("struct S { x: int } impl S { fn foo() -> int { return self.x; } }").is_ok())
+    }
+
+    #[test]
+    fn test_method_call() {
+        assert!(check_all_source("struct S { x: int } impl S { fn foo(y: int) -> int { return y + self.x; } } let mut p: S = S { x: 1 }; p.foo(2);").is_ok())
+    }
+    
+    #[test]
+    fn test_method_call_err() {
+        let result = check_all_source("struct S { x: int } impl S { fn foo(y: int) -> int { return y + self.x; } } let mut p: S = S { x: 1 }; p.foo(true);");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Argument type mismatched."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_no_method_call_err() {
+        let result = check_all_source("struct S { x: int } impl S { fn foo(y: int) -> int { return y + self.x; } } let mut p: S = S { x: 1 }; p.f(true);");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Unknown method."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
     }
 }
