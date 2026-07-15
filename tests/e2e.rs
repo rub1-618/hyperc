@@ -28,6 +28,12 @@ fn test_parade() {
 }
 
 #[test]
+fn test_exit_code() {
+    let (cmd_out, _) = run_hr("tests/fixtures/test_exit_code.hr");
+    assert_eq!(cmd_out.status.code(), Some(42));
+}
+
+#[test]
 fn test_if_else() {
     let (cmd_out, std_out) = run_hr("tests/fixtures/test_if_else.hr");
     assert_eq!(std_out, "-10\n");
@@ -70,7 +76,8 @@ fn test_impl() {
 }
 
 #[test]
-fn test_exit_code() {
-    let (cmd_out, _) = run_hr("tests/fixtures/test_exit_code.hr");
-    assert_eq!(cmd_out.status.code(), Some(42));
+fn test_enum() {
+    let (cmd_out, std_out) = run_hr("tests/fixtures/test_enum.hr");
+    assert_eq!(std_out, "red\n");
+    assert_eq!(cmd_out.status.code(), Some(0));
 }

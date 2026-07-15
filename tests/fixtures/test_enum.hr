@@ -1,0 +1,16 @@
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+fn main() -> int {
+    let const red: Color = Color::Red;
+    if (red == Color::Red) {
+        print("red");
+    } else {
+        print("sh!t");
+    }
+
+    return 0;
+}

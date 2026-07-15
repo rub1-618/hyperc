@@ -1,6 +1,9 @@
 .gitignore
 /target
 
+# ! work debug buffer
+buffer.txt
+
 # ! debug file
 test.hr
 

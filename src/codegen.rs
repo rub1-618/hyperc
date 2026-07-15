@@ -34,6 +34,7 @@ pub struct Codegen<'ctx> {
     builder: Builder<'ctx>,
     variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, VarType)>,
     struct_types: HashMap<String, (StructType<'ctx>, Vec<(String, VarType)>)>,
+    enum_types: HashMap<String, Vec<String>>,
 }
 
 impl <'ctx>Codegen<'ctx> {
@@ -43,7 +44,8 @@ impl <'ctx>Codegen<'ctx> {
         let builder = context.create_builder();
         let variables = HashMap::new();
         let struct_types = HashMap::new();
-        Codegen { context, module, builder, variables, struct_types }
+        let enum_types = HashMap::new();
+        Codegen { context, module, builder, variables, struct_types, enum_types }
     }
 
     pub fn compile(&mut self, stmts: &[Stmt], path: &str, out_name: &str) -> Result<(), CompileError> {
@@ -254,14 +256,26 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(self.builder.build_load(ty, ptr, &field.lexeme)?)
             }
 
+            Expr::Path { type_name, item } => {
+                let variants_vec = self.enum_types.get(&type_name.lexeme).ok_or_else(|| CompileError {
+                    span: type_name.start..type_name.end,
+                    message: "Unknown enum.".to_string()
+                })?;
+                let pos = variants_vec.iter().position(|n| n == &item.lexeme).ok_or_else(|| CompileError {
+                    span: item.start..item.end,
+                    message: "Variant not found.".to_string()
+                });
+                let position = pos? as u64;
+                let i64_type = self.context.i64_type();
+                Ok(i64_type.const_int(position, false).into())
+            }
+
             Expr::SelfExpr { self_tok } => { // todo as arg
                 Err(CompileError { 
                     span: self_tok.start..self_tok.end, 
                     message: "'self' is not a value.".to_string() 
                 })
             }
-
-            _ => todo!()
         }
     }
 
@@ -485,6 +499,15 @@ impl <'ctx>Codegen<'ctx> {
 
             Stmt::Function { name, params, statements, return_type } => {
                 self.compile_function(name, params, statements, return_type)?;
+                Ok(())
+            }
+
+            Stmt::Enum { name, variants } => {
+                let mut variants_vec: Vec<String> = vec![];
+                for variant in variants {
+                    variants_vec.push(variant.lexeme.clone());
+                }                
+                self.enum_types.insert(name.lexeme.clone(), variants_vec);
                 Ok(())
             }
 
@@ -782,10 +805,16 @@ impl <'ctx>Codegen<'ctx> {
                         let struct_type = *sty;
                         Ok(struct_type.into())
                     }
-                    None => return Err(CompileError { 
-                        span: tok.start..tok.end, 
-                        message: "Unknown type.".to_string() 
-                    })  
+                    None => {
+                        match self.enum_types.contains_key(&tok.lexeme) {
+                            true => Ok(self.context.i64_type().into()),
+
+                            false => {return Err(CompileError { 
+                                span: tok.start..tok.end, 
+                                message: "Unknown type.".to_string() 
+                            })}       
+                        }
+                    }
                 }
             }
             _ => return Err(CompileError { 
