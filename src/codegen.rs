@@ -1,5 +1,5 @@
-use crate::{ast::{Expr, LiteralValue, Stmt, VarType}, lexer, token::TokenType};
-use std::{path::Path};
+use crate::{ast::{Expr, LiteralValue, Stmt, VarType::{self, Named}}, lexer, token::TokenType};
+use std::{path::Path, result};
 use std::process::Command;
 use std::collections::HashMap;
 use crate::error::CompileError;
@@ -180,6 +180,33 @@ impl <'ctx>Codegen<'ctx> {
                             Ok(i64_type.const_zero().into())
                         }
                     }
+                } else if let Expr::Get { object, field } = &**callee {
+                    let (ptr, vt) = self.compile_lvalue(object)?;
+                    let result = match vt {
+                        VarType::Named(tok) => {
+                            Self::mangle(&tok.lexeme, &field.lexeme)
+                        }
+                        _ => {return Err(CompileError{
+                            span: field.start..field.end,
+                            message: "Expected named type.".to_string()
+                        });}
+                    };
+                    let function = self.module.get_function(&result).ok_or_else(|| CompileError {
+                        span: field.start..field.end,
+                        message: "Unknown method.".to_string()
+                    })?; 
+                    let mut arg_vec: Vec<BasicMetadataValueEnum> = vec![ptr.into()];
+                    for expression in arguments {
+                        let result = self.compile_expr(expression)?.into();
+                        arg_vec.push(result);
+                    }
+                    match self.builder.build_call(function, &arg_vec, &result)?.try_as_basic_value() {
+                        ValueKind::Basic(v) => {Ok(v)},
+                        ValueKind::Instruction(_) => {
+                            let i64_type = self.context.i64_type();
+                            Ok(i64_type.const_zero().into())
+                        }
+                    }
                 } else {
                     return Err(CompileError { 
                         span: 0..0, 
@@ -221,16 +248,16 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(agg.into())
             }
 
-            Expr::Get { object, field } => {
+            Expr::Get { field, .. } => {
                 let (ptr, vt) = self.compile_lvalue(expr)?;
                 let ty = self.var_to_llvm(&vt)?;
                 Ok(self.builder.build_load(ty, ptr, &field.lexeme)?)
             }
 
-            Expr::SelfExpr { self_tok } => {
+            Expr::SelfExpr { self_tok } => { // todo as arg
                 Err(CompileError { 
                     span: self_tok.start..self_tok.end, 
-                    message: "Methods are not supported yet.".to_string() 
+                    message: "'self' is not a value.".to_string() 
                 })
             }
 
@@ -437,6 +464,25 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(())
             }
 
+            Stmt::Impl { name, methods } => {
+                let named = name.clone();
+                for method in methods {
+                    match method {
+                        Stmt::Function { name, params, 
+                            statements, return_type } => {
+
+                            self.compile_method(name, params, statements, return_type, &named)?;
+                        }
+
+                        _ => {return Err(CompileError { 
+                            span: name.start..name.end, 
+                            message: "Only methods are allowed in impl.".to_string() 
+                        });}
+                    }
+                }
+                Ok(())
+            }
+
             Stmt::Function { name, params, statements, return_type } => {
                 self.compile_function(name, params, statements, return_type)?;
                 Ok(())
@@ -447,6 +493,66 @@ impl <'ctx>Codegen<'ctx> {
                 message: format!("Statement: {:?}, is not supported in v0.1.", stmt)  
             })}
         }
+    }
+
+    fn compile_method(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, 
+    return_type: &Option<VarType>, named: &Token) -> Result<(), CompileError> {
+        let result = Self::mangle(&named.lexeme, &name.lexeme);
+        let og_block = self.builder.get_insert_block();
+        let og_variables = self.variables.clone();
+        let void_type = self.context.void_type();
+        let ptr = self.context.ptr_type(AddressSpace::default());
+        
+        let mut param_types: Vec<BasicMetadataTypeEnum> = vec![];
+        param_types.push(ptr.into());
+        for (_, var_type) in params {
+            param_types.push(self.var_to_llvm(var_type)?.into());
+        }
+
+        let fn_type = match return_type {
+            Some(r) => {
+                 self.var_to_llvm( r)?.fn_type(&param_types, false)
+            }
+            None => {
+                void_type.fn_type(&param_types, false)
+            }
+        };
+
+        let fn_val = self.module.add_function(&result, fn_type, None);
+        let basic_block = self.context.append_basic_block(fn_val, "entry");
+        self.builder.position_at_end(basic_block);
+        self.variables = HashMap::new();
+        
+        let ptr_res = fn_val.get_nth_param(0).unwrap();
+        let ptr_val = ptr_res.into_pointer_value();
+        self.variables.insert("self".to_string(), (ptr_val, self.var_to_llvm(&VarType::Named(named.clone()))?, VarType::Named(named.clone())));
+        for (i, (name, var_type)) in params.iter().enumerate() {
+            let index = (i + 1) as u32;
+            let ty = self.var_to_llvm(&var_type)?;
+            let ptr = self.builder.build_alloca(ty, &name.lexeme)?;
+            let result = fn_val.get_nth_param(index).unwrap();
+            self.builder.build_store(ptr, result)?;
+            self.variables.insert(name.lexeme.clone(), (ptr, ty, var_type.clone()));
+        }
+
+        self.compile_stmt(stmts)?;
+
+        let block= self.builder.get_insert_block().ok_or_else(|| CompileError{
+            span: 0..0,
+            message: "Builder is not positioned.".to_string()
+        })?;
+        let terminator = block.get_terminator();
+        if return_type.is_none() && terminator.is_none() {
+            self.builder.build_return(None)?;
+        }
+        if return_type.is_some() && terminator.is_none() {
+            self.builder.build_unreachable()?;
+        }
+        self.variables = og_variables;
+        if let Some(b) = og_block {
+            self.builder.position_at_end(b);
+        };
+        Ok(())
     }
 
     fn compile_function(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, return_type: &Option<VarType> ) -> Result<(), CompileError> {
@@ -514,6 +620,10 @@ impl <'ctx>Codegen<'ctx> {
         }
 
         Ok(())
+    }
+
+    fn mangle(ty: &str, name: &str) -> String {
+        format!("{}.{}", ty, name)
     }
 
     fn is_comparison(op: &Token) -> bool {
@@ -720,8 +830,7 @@ impl <'ctx>Codegen<'ctx> {
                             }
                         }
                     }
-                    _ => {
-                        return Err(CompileError { 
+                    _ => {return Err(CompileError { 
                             span: field.start..field.end, 
                             message: "This type has no fields.".to_string() 
                         })
@@ -730,10 +839,11 @@ impl <'ctx>Codegen<'ctx> {
             }
 
             Expr::SelfExpr { self_tok } => {
-                Err(CompileError { 
-                    span: self_tok.start..self_tok.end, 
-                    message: "Methods are not supported yet.".to_string() 
-                })
+                let (ptr, _, vt) = self.variables.get(&"self".to_string()).ok_or_else(|| CompileError{
+                    span: self_tok.start..self_tok.end,
+                    message: "'self' is outside of a method.".to_string()
+                })?;
+                Ok((*ptr, vt.clone()))
             }
 
             _ => {

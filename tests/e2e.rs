@@ -63,6 +63,13 @@ fn test_struct() {
 }
 
 #[test]
+fn test_impl() {
+    let (cmd_out, std_out) = run_hr("tests/fixtures/test_impl.hr");
+    assert_eq!(std_out, "1\n1\n5\n7\n");
+    assert_eq!(cmd_out.status.code(), Some(0));
+}
+
+#[test]
 fn test_exit_code() {
     let (cmd_out, _) = run_hr("tests/fixtures/test_exit_code.hr");
     assert_eq!(cmd_out.status.code(), Some(42));

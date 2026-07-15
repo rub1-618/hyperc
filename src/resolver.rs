@@ -109,30 +109,32 @@ impl Resolver {
 
                     Expr::Get { object, .. } => {
                         self.resolve_expr(object)?;
-                        let root_name: Option<&Token>= Self::root_name(target);
+                        let root_name: Option<&Token>= Self::lvalue_root(target);
                         match root_name {
                             Some(rn) => {
-                                match self.lookup_binding(rn) {
-                                    Some(b) => {
-                                        if b.kind == VarKind::Const {
-                                            return Err(ParseError { 
-                                                span: rn.start..rn.end,
-                                                message: "Cannot assign to const variable.".to_string() 
-                                            })
+                                if rn.lexeme != "self" { // there's no binding with such lexeme, so we can check it
+                                    match self.lookup_binding(rn) {
+                                        Some(b) => {
+                                            if b.kind == VarKind::Const {
+                                                return Err(ParseError { 
+                                                    span: rn.start..rn.end,
+                                                    message: "Cannot assign to const variable.".to_string() 
+                                                })
+                                            }
                                         }
+                                        None => { return Err(ParseError { 
+                                            span: rn.start..rn.end,
+                                            message: "Variable not found.".to_string() 
+                                        })}
                                     }
-                                    None => { return Err(ParseError { 
-                                        span: rn.start..rn.end,
-                                        message: "Variable not found.".to_string() 
-                                    })}
                                 }
+                                Ok(())
                             }
                             None => { return Err(ParseError { 
                                 span: Self::expr_span(target),
                                 message: "Invalid assignment target.".to_string() 
                             })}
                         }    
-                        Ok(())
                     }
 
                     _ => unreachable!()
@@ -510,9 +512,14 @@ impl Resolver {
         }
     }
 
-    fn root_name(expr: &Expr) -> Option<&Token> {
+    fn lvalue_root(expr: &Expr) -> Option<&Token> {
         match expr {
-            Expr::Get { object, .. } => Self::root_name(object),
+            Expr::Get { object, .. } => {
+                match &**object {
+                    Expr::SelfExpr { self_tok } => Some(self_tok),
+                    _ => Self::lvalue_root(object)
+                }
+            },
             Expr::Variable { name } => Some(name),
             _ => None
         }

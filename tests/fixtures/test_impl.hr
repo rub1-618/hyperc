@@ -1,0 +1,42 @@
+struct Smth {
+    is_bored: bool,
+}
+
+struct Point {
+    x: int,
+    y: int,
+    z: int,
+    b: Smth,
+}
+
+impl Point {
+
+    fn get_x () -> int {
+        return self.x;
+    }
+
+    fn set_x (v: int) {
+        self.x = v;
+    }
+
+    fn add_x (a: int) -> int {
+        return self.x + a;
+    }
+
+    fn bored() -> bool {
+        self.b.is_bored = true;
+        let mut boredom: bool = self.b.is_bored;
+        return boredom;
+    }
+}
+
+fn main() -> int {
+    let mut p: Point = Point { x: 1, y: 2, z: 3, b: Smth { is_bored: false } };
+    print(p.bored());
+    print(p.x); // 1
+    p.set_x(5);
+    print(p.x); // 5
+    print(p.add_x(2)); // 7
+
+    return 0;
+}
