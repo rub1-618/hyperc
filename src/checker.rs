@@ -2,7 +2,7 @@ use crate::token::{TokenType, Token};
 use crate::ast::{Expr, Stmt, LiteralValue, VarType};
 use crate::resolver::{TypeInfo};
 use crate::error::TypeError;
-use crate::support::{mangle, stmt_span, vartype_to_type};
+use crate::support::{mangle, vartype_to_type};
 use std::collections::HashMap;
 use std::ops::Range;
 

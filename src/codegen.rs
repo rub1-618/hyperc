@@ -6,7 +6,6 @@ use crate::support::{expr_span, is_comparison, mangle, stmt_span};
 use std::{path::Path};
 use std::process::Command;
 use std::collections::HashMap;
-use ariadne::Span;
 use inkwell::{
     AddressSpace, OptimizationLevel, basic_block::BasicBlock, builder::{Builder, BuilderError}, context::Context, module::Module, targets::{
         CodeModel, 
@@ -290,7 +289,7 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(())
             }
 
-            Stmt::Print { value } => { // todo type printing
+            Stmt::Print { value } => {
                 let i32_type = self.context.i32_type();
                 let ptr = self.context.ptr_type(AddressSpace::default());
                 let fn_type = i32_type.fn_type(&[ptr.into()], true);
@@ -307,11 +306,22 @@ impl <'ctx>Codegen<'ctx> {
                     "%s\n"
                 } else if result.is_float_value() {
                     "%f\n"
+                } else if result.into_int_value().get_type().get_bit_width() == 1 {
+                    "%b\n" // sentinel, intercepted below, never reaches printf
                 } else if result.into_int_value().get_type().get_bit_width() == 8 {
                     "%c\n"
                 } else {
                     "%ld\n"
                 };
+
+                if fmt_str == "%b\n" {
+                    let ptr_true = self.builder.build_global_string_ptr("true\n", "ptr_true")?.as_pointer_value();
+                    let ptr_false = self.builder.build_global_string_ptr("false\n", "ptr_false")?.as_pointer_value();
+                    let select = self.builder.build_select(result.into_int_value(), ptr_true, ptr_false, "boolstr")?;
+                    self.builder.build_call(print_fn, &[select.into()], "print")?;
+                    return Ok(())
+                }
+
                 let fmt = self.builder.build_global_string_ptr(fmt_str, "fmt")?;
                 self.builder.build_call(print_fn, &[fmt.as_pointer_value().into(), result.into()], "print")?;
                 Ok(())

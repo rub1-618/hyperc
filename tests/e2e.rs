@@ -23,7 +23,7 @@ fn run_hr(path: &str) -> (Output, String) {
 #[test]
 fn test_parade() {
     let (cmd_out, std_out) = run_hr("tests/fixtures/test_parade.hr");
-    assert_eq!(std_out, "-10\nhi\n0.000000\n0\nc\n"); 
+    assert_eq!(std_out, "-10\nhi\n0.000000\nfalse\nc\n"); 
     assert_eq!(cmd_out.status.code(), Some(0));  
 }
 
@@ -64,14 +64,14 @@ fn test_func() {
 #[test]
 fn test_struct() {
     let (cmd_out, std_out) = run_hr("tests/fixtures/test_struct.hr");
-    assert_eq!(std_out, "1\n0\n2.500000\n");
+    assert_eq!(std_out, "1\nfalse\n2.500000\n");
     assert_eq!(cmd_out.status.code(), Some(0));
 }
 
 #[test]
 fn test_impl() {
     let (cmd_out, std_out) = run_hr("tests/fixtures/test_impl.hr");
-    assert_eq!(std_out, "1\n1\n5\n7\n");
+    assert_eq!(std_out, "true\n1\n5\n7\n");
     assert_eq!(cmd_out.status.code(), Some(0));
 }
 
