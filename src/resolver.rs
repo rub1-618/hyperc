@@ -1,14 +1,13 @@
 use crate::error::{ParseError};
 use crate::token::{Token};
 use crate::ast::{Expr, Stmt, VarKind, VarType};
+use crate::support::{expr_span, stmt_span};
 use std::collections::{HashMap, HashSet};
-use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct Binding {
     ready: bool,
     kind: VarKind, // todo
-    var_type: VarType, // todo
 }
 
 #[derive(Debug, Clone)]
@@ -52,16 +51,16 @@ impl Resolver {
                 Stmt::Struct { .. } | Stmt::Impl { .. } |
                 Stmt::Enum { .. } => { self.resolve_stmt(statement)?; }
                 _ => return Err(ParseError { 
-                    span: Self::stmt_span(statement),
+                    span: stmt_span(statement),
                     message: "Only functions, structs, impls and enums are top-level-supported.".to_string() 
                 })
             }
         }
         if !has_main {
             return Err(ParseError { 
-                    span: 0..0, // ok
-                    message: "'main' function not found.".to_string() 
-                })
+                span: 0..0, // ok
+                message: "'main' function not found.".to_string() 
+            })
         }
         Ok(())
     }
@@ -78,7 +77,7 @@ impl Resolver {
             },
 
             Stmt::Let { name, value , kind, var_type} => {
-                self.declare(name, kind.clone(), var_type.clone())?;
+                self.declare(name, kind.clone())?;
                 self.check_type_exists(var_type)?;
                 self.resolve_expr(value)?;
                 self.define(name);
@@ -131,7 +130,7 @@ impl Resolver {
                                 Ok(())
                             }
                             None => { return Err(ParseError { 
-                                span: Self::expr_span(target),
+                                span: expr_span(target),
                                 message: "Invalid assignment target.".to_string() 
                             })}
                         }    
@@ -285,7 +284,7 @@ impl Resolver {
                         match self.lookup_binding(name) {
                             Some(_) => Ok(()),
                             None => return Err( ParseError { 
-                                span: Self::expr_span(callee), 
+                                span: expr_span(callee), 
                                 message: "Unknown function.".to_string(),
                             })
                         }
@@ -297,7 +296,7 @@ impl Resolver {
                     }
 
                     _ => return Err( ParseError { 
-                        span: Self::expr_span(callee), 
+                        span: expr_span(callee), 
                         message: "Not a function.".to_string(),
                     })
                 }
@@ -401,27 +400,6 @@ impl Resolver {
             _ => Ok(())
         }
     }
-    
-    // fn resolve_local(&mut self, name: &Token) -> Result<(), ParseError> {
-    //     for scope in self.scopes.iter().rev() {
-    //         match scope.get(&name.lexeme) {
-    //             Some(binding) => {
-    //                 if !binding.ready {
-    //                     return Err( ParseError { 
-    //                         span: name.start..name.end, 
-    //                         message: "Variable is used in self-declarement.".to_string(),
-    //                     });
-    //                 }
-    //                 return Ok(());
-    //             }
-    //             None => {} 
-    //         }
-    //     }
-    //     Err( ParseError { 
-    //         span: name.start..name.end, 
-    //         message: "Variable not found.".to_string(),
-    //     })
-    // }
 
     fn resolve_func_body(&mut self, name: &Token, params: &Vec<(Token, VarType)>, statements: &Box<Stmt>, 
     return_type: &Option<VarType>, is_method: bool) -> Result<(), ParseError> {
@@ -449,7 +427,7 @@ impl Resolver {
         result
     }
 
-    fn declare(&mut self, name: &Token, kind: VarKind, var_type: VarType) -> Result<(), ParseError> {
+    fn declare(&mut self, name: &Token, kind: VarKind) -> Result<(), ParseError> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name.lexeme.clone()) {
                 return Err( ParseError { 
@@ -457,7 +435,7 @@ impl Resolver {
                     message: "Variable is already declared.".to_string(),
                 });
             }
-            scope.insert(name.lexeme.clone(), Binding { ready: false, kind, var_type } );
+            scope.insert(name.lexeme.clone(), Binding { ready: false, kind } );
         }
         Ok(())
     }
@@ -470,7 +448,7 @@ impl Resolver {
                     message: "Already declared.".to_string(),
                 });
             }
-            scope.insert(name.lexeme.clone(), Binding { ready: false, kind: VarKind::Mut, var_type: VarType::Str, } );
+            scope.insert(name.lexeme.clone(), Binding { ready: false, kind: VarKind::Mut } );
         }                                                                       // kind and type are simple plugs
         Ok(())
     }
@@ -482,30 +460,6 @@ impl Resolver {
             }
         }
         None
-    }
-
-    fn stmt_span(stmt: &Stmt) -> Range<usize> {
-        match stmt {
-            Stmt::Let { name, .. } => name.start..name.end,
-            Stmt::Assign { target, .. } => Self::expr_span(target),
-            Stmt::Expression { value } => Self::expr_span(value),
-            _ => {0..0},
-        }
-    }
-
-    fn expr_span(expr: &Expr) -> Range<usize> {
-        match expr {
-            Expr::Binary { operator, .. } => operator.start..operator.end,
-            Expr::Unary { operator, .. } => operator.start..operator.end,
-            Expr::Call { paren, .. } => paren.start..paren.end,
-            Expr::Variable { name } => name.start..name.end,
-            Expr::Literal { span, .. } => span.clone(),
-            Expr::Grouping { expr } => Self::expr_span(expr),
-            Expr::StructLit { name, .. } => name.start..name.end,
-            Expr::Get {  field, .. } => field.start..field.end,
-            Expr::Path { type_name, .. } => type_name.start..type_name.end,
-            Expr::SelfExpr { self_tok } => self_tok.start..self_tok.end,
-        }
     }
 
     fn define(&mut self, name: &Token) {

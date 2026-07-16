@@ -1,6 +1,6 @@
+use crate::token::{TokenType, Token};
 use crate::error::{LexerError};
 use std::string::String;
-use crate::token::{TokenType, Token};
 
 pub struct Lexer {
     source: String,
@@ -29,7 +29,7 @@ impl Lexer {
             self.start = self.current;
             self.scan_token()?;
         }
-        self.tokens.push(Token::new(TokenType::Eof, "".to_string(), self.line, self.current, self.current));
+        self.tokens.push(Token::new(TokenType::Eof, "".to_string(), self.current, self.current)); // line | v0.4+
         Ok(self.tokens.clone())
     }
 
@@ -238,7 +238,7 @@ impl Lexer {
 
     fn add_token(&mut self, token_type: TokenType) {
         let lexeme: String = self.source[self.start..self.current].to_string();
-        let token = Token::new(token_type, lexeme, self.line, self.start, self.current);
+        let token = Token::new(token_type, lexeme, self.start, self.current); // line | v0.4+
         self.tokens.push(token);
     }
 
@@ -280,7 +280,7 @@ impl Lexer {
         self.advance();
         
         let lexeme: String = self.source[self.start+1..self.current-1].to_string();
-        let token = Token::new(TokenType::StringLit, lexeme, self.line, self.start, self.current);
+        let token = Token::new(TokenType::StringLit, lexeme,  self.start, self.current); // line | v0.4+
         self.tokens.push(token);
         Ok(())
     }

@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-use std::ops::Range;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, Stmt, LiteralValue, VarType};
-use crate::resolver::{Resolver, TypeInfo};
+use crate::resolver::{TypeInfo};
 use crate::error::TypeError;
+use crate::support::{mangle, stmt_span, vartype_to_type};
+use std::collections::HashMap;
+use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -14,7 +15,7 @@ pub enum Type {
     Bool,
     Unit,
     Named(String),
-    Error, // todo
+    // todo Error,
 }
 
 impl std::fmt::Display for Type {
@@ -27,7 +28,7 @@ impl std::fmt::Display for Type {
             Type::Bool => write!(f, "bool"),
             Type::Unit => write!(f, "()"),
             Type::Named(name) => write!(f, "{}", name),
-            Type::Error => write!(f, "<error>"),
+            // Type::Error => write!(f, "<error>"),
         }
     }
 }
@@ -162,7 +163,7 @@ impl TypeChecker {
                     _ => {
                         return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "This binary operator is not supported in v0.1.".to_string() 
+                                message: "This binary operator is not supported in v0.2.".to_string() 
                             })
                     },
                 }
@@ -198,7 +199,7 @@ impl TypeChecker {
                     _ => {
                         return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: "This unary operator is not supported in v0.1.".to_string() 
+                                message: "This unary operator is not supported in v0.2.".to_string() 
                             })
                         }
                 }
@@ -239,7 +240,7 @@ impl TypeChecker {
                     Expr::Get { object, field } => {
                         match self.infer(object)? {
                             Type::Named(tok) => {
-                                let result = Self::mangle(&tok, &field.lexeme);
+                                let result = mangle(&tok, &field.lexeme);
                                 let sig = match self.functions.get(&result) {
                                     Some(s) => s.clone(),
                                     None => return Err(TypeError { 
@@ -321,7 +322,7 @@ impl TypeChecker {
                 for (tok, expr) in fields {
                     match schema.iter().find(|(n,_)| n == &tok.lexeme) {
                         Some((_, vt)) => {
-                            let expected = Self::vartype_to_type(vt);
+                            let expected = vartype_to_type(vt);
                             let got = self.infer(expr)?;
                             if expected != got {
                                 return Err(TypeError { 
@@ -348,7 +349,7 @@ impl TypeChecker {
                             Some(TypeInfo::Struct { fields }) => {
                                 match fields.iter().find(|(n,_)| n == &field.lexeme) {
                                     Some((_, vt)) => {
-                                        return Ok(Self::vartype_to_type(vt))
+                                        return Ok(vartype_to_type(vt))
                                     }
 
                                     None => {return Err(TypeError { 
@@ -392,17 +393,6 @@ impl TypeChecker {
             }
         }
     }
-      
-    pub fn vartype_to_type(vt: &VarType) -> Type {
-        match vt {
-            VarType::Int => {Type::Int},
-            VarType::Float => {Type::Float},
-            VarType::Str => {Type::Str},
-            VarType::Char => {Type::Char},
-            VarType::Bool => {Type::Bool},
-            VarType::Named(tok) => Type::Named(tok.lexeme.clone()),
-        }
-    }
 
     pub fn check_stmt( &mut self, stmt: &Stmt ) -> Result<(), TypeError> {
         match stmt {
@@ -436,7 +426,7 @@ impl TypeChecker {
 
             Stmt::Let { name, value, kind: _, var_type } => {
                 let ty = self.infer(value)?;
-                let expected = Self::vartype_to_type(var_type);
+                let expected = vartype_to_type(var_type);
                 if ty == expected {
                     self.declare(name, ty)
                 } else {
@@ -559,7 +549,7 @@ impl TypeChecker {
             Stmt::Return { value } => {
                 let span = match value {
                     Some(sp) => Self::expr_span(sp),
-                    None => 0..0, // todo
+                    None => 0..0,
                 };
 
                 let ret_type = match value {
@@ -626,10 +616,6 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn mangle(ty: &str, name: &str) -> String {
-        format!("{}.{}", ty, name)
-    }
-
     fn check_func_body(&mut self, name: &Token, params: &Vec<(Token, VarType)>, statements: &Box<Stmt>, 
     return_type: &Option<VarType>, is_method: bool, named: Option<&Token> ) -> Result<(), TypeError> {
         let prev_rt = self.current_return.take();
@@ -640,23 +626,23 @@ impl TypeChecker {
             None
         };
         let key_owner = match named {
-            Some(ty) => Self::mangle(&ty.lexeme, &name.lexeme),
+            Some(ty) => mangle(&ty.lexeme, &name.lexeme),
             None => name.lexeme.clone(),
         };
         let prev_fn = match return_type{
-            Some(vt) => Self::vartype_to_type(vt),
+            Some(vt) => vartype_to_type(vt),
             None => Type::Unit,
         };
         self.current_return = Some(prev_fn.clone());
         let mut param_types = vec![];
         for p in params {
-            param_types.push(Self::vartype_to_type(&p.1));
+            param_types.push(vartype_to_type(&p.1));
         }
         self.functions.insert( key_owner, FnSig { params: param_types, ret: prev_fn });
         self.begin_scope();
         let result = ( || {
             for param in params {
-                self.declare(&param.0, Self::vartype_to_type(&param.1))?;
+                self.declare(&param.0, vartype_to_type(&param.1))?;
             }
             self.check_stmt(statements)?;
             match return_type {
@@ -744,6 +730,7 @@ mod tests {
     use super::*;
     use crate::lexer::Lexer;
     use crate::parser::Parser;
+    use crate::resolver::Resolver;
 
     fn infer_source(src: &str) -> Result<Type, TypeError> {
         let mut lexer = Lexer::new(src  .to_string());

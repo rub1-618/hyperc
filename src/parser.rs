@@ -1,7 +1,5 @@
-use inkwell::llvm_sys::{object, target_machine};
-
 use crate::error::{ParseError};
-use crate::token::TokenType::Enum;
+use crate::support::expr_span;
 use crate::token::{TokenType, Token};
 use crate::ast::{Expr, LiteralValue, Stmt, VarKind, VarType};
 
@@ -550,7 +548,7 @@ impl Parser {
                     return Ok(Stmt::Assign { target: Box::new(expr), value: Box::new(value) })
                 }
                 _ => return Err(ParseError {
-                    span: 0..0,
+                    span: expr_span(&expr),
                     message: "Invalid assignment target.".to_string()
                 })
             }
@@ -659,7 +657,7 @@ mod tests {
 use core::panic;
 
 use super::*;
-    use crate::{ast::Expr::SelfExpr, lexer::Lexer};
+    use crate::lexer::Lexer;
     fn parse_source(src: &str) -> Vec<Stmt> {
         let mut lexer = Lexer::new(src  .to_string());
         let tokens = lexer.scan_tokens().unwrap();
@@ -744,10 +742,18 @@ use super::*;
         let mut lexer = Lexer::new("1 + 2 * 3;".to_string());
         let tokens = lexer.scan_tokens().unwrap();
         let mut _parser = Parser::new(tokens.clone());
-        let expr = _parser.parse();
-        // if let Expr::Binary { right, .. } = expr {
-        //     assert!(matches!(*right, Expr::Binary { .. }))
-        // }
+        let stmt = _parser.parse().unwrap();
+        match &stmt[0] {
+            Stmt::Expression { value } => {
+                match &**value {
+                    Expr::Binary { right, .. } => {
+                        assert!(matches!(&**right, Expr::Binary { .. }))
+                    }
+                    _ => panic!("Expected binary expression.")
+                }
+            }
+            _ => panic!("Expected expression statement.")
+        }
     }  
 
     #[test]

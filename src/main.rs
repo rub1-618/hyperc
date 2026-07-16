@@ -1,10 +1,9 @@
-use std::env::{self, args};
 use std::io::{self, BufRead, Write};
+use std::env;
 use std::fs;
 
 use inkwell::context::Context;
 use codegen::Codegen;
-use inkwell::types;
 
 mod lexer;
 mod token;
@@ -14,6 +13,7 @@ mod error;
 mod resolver;
 mod checker;
 mod codegen;
+mod support;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

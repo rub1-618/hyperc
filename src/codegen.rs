@@ -1,9 +1,12 @@
-use crate::{ast::{Expr, LiteralValue, Stmt, VarType::{self, Named}}, lexer, token::TokenType};
-use std::{path::Path, result};
-use std::process::Command;
-use std::collections::HashMap;
+use crate::ast::{Expr, LiteralValue, Stmt, VarType};
+use crate::token::TokenType;
 use crate::error::CompileError;
 use crate::token::Token;
+use crate::support::{expr_span, is_comparison, mangle, stmt_span};
+use std::{path::Path};
+use std::process::Command;
+use std::collections::HashMap;
+use ariadne::Span;
 use inkwell::{
     AddressSpace, OptimizationLevel, basic_block::BasicBlock, builder::{Builder, BuilderError}, context::Context, module::Module, targets::{
         CodeModel, 
@@ -15,7 +18,7 @@ use inkwell::{
     }, types::{
         BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType
     }, values::{
-        AggregateValueEnum, BasicMetadataValueEnum, BasicValueEnum, FloatValue, IntValue, PointerValue, ValueKind,
+        BasicMetadataValueEnum, BasicValueEnum, FloatValue, IntValue, PointerValue, ValueKind,
     },
 };
 
@@ -96,7 +99,7 @@ impl <'ctx>Codegen<'ctx> {
                     }
                     // todo LiteralValue::Null() => {}
                     _ => return Err(CompileError { 
-                        span: 0..0, 
+                        span: expr_span(expr), 
                         message: format!("Literal: {:?}, is not supported in v0.2.", value) 
                     })
                 }
@@ -106,7 +109,7 @@ impl <'ctx>Codegen<'ctx> {
                 let mut lhs = self.compile_expr(left)?;
                 let mut rhs = self.compile_expr(right)?;
                 if lhs.is_int_value() && rhs.is_int_value() {
-                    if Self::is_comparison(operator) {
+                    if is_comparison(operator) {
                         Ok(self.compile_int_comparison(lhs.into_int_value(), operator, rhs.into_int_value())?.into())
                     } else {
                         Ok(self.compile_int_binary(lhs.into_int_value(), operator, rhs.into_int_value())?.into())
@@ -128,7 +131,7 @@ impl <'ctx>Codegen<'ctx> {
                         )?.into();
                     }
 
-                    if Self::is_comparison(operator) {
+                    if is_comparison(operator) {
                         Ok(self.compile_float_comparison(lhs.into_float_value(), operator, rhs.into_float_value())?.into())
                     } else {
                         Ok(self.compile_float_binary(lhs.into_float_value(), operator, rhs.into_float_value())?.into())
@@ -153,7 +156,7 @@ impl <'ctx>Codegen<'ctx> {
 
                     _ => Err( CompileError { 
                         span: operator.start..operator.end, 
-                        message: "This unary operator is not supported in v0.1.".to_string() 
+                        message: "This unary operator is not supported in v0.2.".to_string() 
                     })
                     
                 }
@@ -186,7 +189,7 @@ impl <'ctx>Codegen<'ctx> {
                     let (ptr, vt) = self.compile_lvalue(object)?;
                     let result = match vt {
                         VarType::Named(tok) => {
-                            Self::mangle(&tok.lexeme, &field.lexeme)
+                            mangle(&tok.lexeme, &field.lexeme)
                         }
                         _ => {return Err(CompileError{
                             span: field.start..field.end,
@@ -211,7 +214,7 @@ impl <'ctx>Codegen<'ctx> {
                     }
                 } else {
                     return Err(CompileError { 
-                        span: 0..0, 
+                        span: expr_span(callee),
                         message: format!("Only simple function calls are supported: {:?}.", callee) 
                     });
                 }
@@ -358,7 +361,7 @@ impl <'ctx>Codegen<'ctx> {
                 let c = self.compile_expr(params)?;
                 let og_block = self.builder.get_insert_block();
                 let fn_val = og_block.unwrap().get_parent().ok_or_else(|| CompileError {
-                    span: 0..0, 
+                    span: expr_span(params),
                     message: "Cannot get the fn_val for if statement.".to_string()
                 })?;
 
@@ -388,7 +391,7 @@ impl <'ctx>Codegen<'ctx> {
             Stmt::While { conditions, statements } => {
                 let og_block = self.builder.get_insert_block();
                 let fn_val = og_block.unwrap().get_parent().ok_or_else(|| CompileError {
-                    span: 0..0,
+                    span: expr_span(conditions),
                     message: "Cannot get the fn_val for while statement.".to_string()
                 })?;
                 let loop_cond = self.context.append_basic_block(fn_val, "loop_cond");
@@ -411,7 +414,7 @@ impl <'ctx>Codegen<'ctx> {
             increment, statements } => {
                 let og_block = self.builder.get_insert_block();
                 let fn_val = og_block.unwrap().get_parent().ok_or_else(|| CompileError {
-                    span: 0..0,
+                    span: stmt_span(statements),
                     message: "Cannot get the fn_val for while statement.".to_string()
                 })?;
                 let loop_cond = self.context.append_basic_block(fn_val, "loop_cond");
@@ -436,7 +439,7 @@ impl <'ctx>Codegen<'ctx> {
                 self.compile_stmt(statements)?;
 
                 let br = self.builder.get_insert_block().ok_or_else(|| CompileError{
-                    span: 0..0,
+                    span: stmt_span(statements),
                     message: "Builder is not positioned.".to_string()
                 })?;
                 let terminator = br.get_terminator();
@@ -510,17 +513,12 @@ impl <'ctx>Codegen<'ctx> {
                 self.enum_types.insert(name.lexeme.clone(), variants_vec);
                 Ok(())
             }
-
-            _ => {Err(CompileError { 
-                span: 0..0, 
-                message: format!("Statement: {:?}, is not supported in v0.1.", stmt)  
-            })}
         }
     }
 
     fn compile_method(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, 
     return_type: &Option<VarType>, named: &Token) -> Result<(), CompileError> {
-        let result = Self::mangle(&named.lexeme, &name.lexeme);
+        let result = mangle(&named.lexeme, &name.lexeme);
         let og_block = self.builder.get_insert_block();
         let og_variables = self.variables.clone();
         let void_type = self.context.void_type();
@@ -561,7 +559,7 @@ impl <'ctx>Codegen<'ctx> {
         self.compile_stmt(stmts)?;
 
         let block= self.builder.get_insert_block().ok_or_else(|| CompileError{
-            span: 0..0,
+            span: stmt_span(stmts),
             message: "Builder is not positioned.".to_string()
         })?;
         let terminator = block.get_terminator();
@@ -578,7 +576,8 @@ impl <'ctx>Codegen<'ctx> {
         Ok(())
     }
 
-    fn compile_function(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, return_type: &Option<VarType> ) -> Result<(), CompileError> {
+    fn compile_function(&mut self, name: &Token, params: &Vec<(Token, VarType)>, stmts: &Stmt, 
+    return_type: &Option<VarType> ) -> Result<(), CompileError> {
         let og_block = self.builder.get_insert_block();
         let og_variables = self.variables.clone();
         let mut param_types: Vec<BasicMetadataTypeEnum> = vec![];
@@ -612,7 +611,7 @@ impl <'ctx>Codegen<'ctx> {
         self.compile_stmt(stmts)?;
 
         let block= self.builder.get_insert_block().ok_or_else(|| CompileError{
-            span: 0..0,
+            span: stmt_span(stmts),
             message: "Builder is not positioned.".to_string()
         })?;
         let terminator = block.get_terminator();
@@ -634,7 +633,7 @@ impl <'ctx>Codegen<'ctx> {
         self.builder.position_at_end(basic_block);
         self.compile_stmt(branch)?;
         let br = self.builder.get_insert_block().ok_or_else(|| CompileError{
-            span: 0..0,
+            span: stmt_span(branch),
             message: "Builder is not positioned.".to_string()
         })?;
         let terminator = br.get_terminator();
@@ -643,23 +642,6 @@ impl <'ctx>Codegen<'ctx> {
         }
 
         Ok(())
-    }
-
-    fn mangle(ty: &str, name: &str) -> String {
-        format!("{}.{}", ty, name)
-    }
-
-    fn is_comparison(op: &Token) -> bool {
-        match op.token_type {
-            TokenType::Less |
-            TokenType::LessEqual |
-            TokenType::Greater |
-            TokenType::GreaterEqual |
-            TokenType::BangEqual |
-            TokenType::EqualEqual => {true}
-            
-            _ => false
-        }
     }
 
     fn compile_int_binary(&self, lhs: IntValue<'ctx>, op: &Token, rhs: IntValue<'ctx>) -> Result<IntValue<'ctx>, CompileError> {
@@ -687,7 +669,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => return Err(CompileError { 
                         span: op.start..op.end, 
-                        message: "This binary expression is not supported in v0.1.".to_string() 
+                        message: "This binary expression is not supported in v0.2.".to_string() 
                     })
         }
     }
@@ -720,7 +702,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => return Err(CompileError { 
                         span: op.start..op.end, 
-                        message: "This int comparison expression is not supported in v0.1.".to_string() 
+                        message: "This int comparison expression is not supported in v0.2.".to_string() 
                     })
         }
     }
@@ -746,7 +728,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => return Err(CompileError { 
                         span: op.start..op.end, 
-                        message: "This float binary expression is not supported in v0.1.".to_string() 
+                        message: "This float binary expression is not supported in v0.2.".to_string() 
                     })
         }
     }
@@ -779,7 +761,7 @@ impl <'ctx>Codegen<'ctx> {
 
                 _ => return Err(CompileError { 
                             span: op.start..op.end, 
-                            message: "This float comparison expression is not supported in v0.1.".to_string() 
+                            message: "This float comparison expression is not supported in v0.2.".to_string() 
                         })
         }
     }
@@ -877,7 +859,7 @@ impl <'ctx>Codegen<'ctx> {
 
             _ => {
                 return Err(CompileError { 
-                    span: 0..0, 
+                    span: expr_span(expr), 
                     message: "Wrong expression to compile left value.".to_string() 
                 })
             }
@@ -885,18 +867,19 @@ impl <'ctx>Codegen<'ctx> {
     }
 
     fn emit_obj(&self, path: &str, out_name: &str) -> Result<(), CompileError> {
+        let span= 0..0; // environment errors do not have source span
         match Target::initialize_native(&InitializationConfig::default()) {
             Ok(()) => {}
             Err(e) => {
                 return Err(CompileError { 
-                        span: 0..0, 
+                        span: span.clone(), 
                         message: e.to_string() 
                     })
             }
         }
         let default_triple = TargetMachine::get_default_triple();
         let target = Target::from_triple(&default_triple).map_err(|e| CompileError{
-            span: 0..0,
+            span: span.clone(),
             message: e.to_string()
         })?;
         let target_machine = target.create_target_machine(
@@ -907,7 +890,7 @@ impl <'ctx>Codegen<'ctx> {
             RelocMode::PIC,
             CodeModel::Default,
         ).ok_or_else(|| CompileError{
-            span: 0..0,
+            span: span.clone(),
             message: "Target machine creation failed.".to_string()
         })?;
         let out_path = Path::new(path).parent().unwrap_or(Path::new("."));
@@ -929,14 +912,14 @@ impl <'ctx>Codegen<'ctx> {
                     return Ok(())
                 } else {
                     return Err(CompileError {
-                        span: 0..0, 
+                        span: span.clone(), 
                         message: format!("Autolinking failed: {:?}", status.code()) 
                     })
                 }
                 
             },
             Err(e) => { return Err(CompileError {
-                span: 0..0, 
+                span: span.clone(), 
                 message: format!("Autolinking failed: {:?} on {}", e, &obj_path.display()) 
             })}
         }

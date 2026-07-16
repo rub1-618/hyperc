@@ -49,13 +49,13 @@ pub enum TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
-    pub line: usize,
+    // pub line: usize, | reserved: multi-file diagnostic v0.4+
     pub start: usize,
     pub end: usize,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, line: usize, start: usize, end: usize ) -> Self {
-        Token { token_type, lexeme, line, start, end  }
+    pub fn new(token_type: TokenType, lexeme: String, start: usize, end: usize ) -> Self {
+        Token { token_type, lexeme, start, end  }
     }
 }
