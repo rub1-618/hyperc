@@ -110,13 +110,40 @@ impl TypeChecker {
 
                     TokenType::EqualEqual | TokenType::BangEqual => {
                         if (lt == Type::Int || lt == Type::Float) && (rt == Type::Int || rt == Type::Float) {
-                            Ok(Type::Bool)
+                            Ok(Type::Bool) 
                         } else if lt == rt {
-                            Ok(Type::Bool)
+                            match &lt {
+                                Type::Named(str) => {
+                                    match self.types.get(&str.to_string()) {
+                                        Some(TypeInfo::Enum { .. }) => {return Ok(Type::Bool)}
+                                        Some(TypeInfo::Struct { .. }) => {return Err(TypeError { 
+                                            span: operator.start..operator.end, 
+                                            message: "Cannot compare structs. (yet)".to_string()
+                                        })}
+
+                                        _ => {return Err(TypeError { 
+                                            span: operator.start..operator.end, 
+                                            message: "Unknown type.".to_string()
+                                        })}
+                                    }                                    
+                                }
+
+                                Type::Char | Type::Bool => {Ok(Type::Bool)} 
+
+                                Type::Str => {return Err(TypeError { 
+                                    span: operator.start..operator.end, 
+                                    message: "String comparison is not supported, you can use char for single symbol instead.".to_string()
+                                })}
+
+                                _ => {return Err(TypeError { 
+                                    span: operator.start..operator.end, 
+                                    message: format!("Invalid comparison operands, got {} and {}.", lt, rt) 
+                                })}
+                            }
                         } else {
                             return Err(TypeError { 
                                 span: operator.start..operator.end, 
-                                message: format!("Comparison operands must be numeric, got {} and {}.", lt, rt) 
+                                message: format!("Invalid comparison operands, got {} and {}.", lt, rt) 
                             })
                         }
                     },
@@ -242,7 +269,7 @@ impl TypeChecker {
                             }
                             _ => return Err(TypeError { 
                                     span: field.start..field.end, 
-                                    message: "This type has no fields.".to_string() 
+                                    message: "This type has no methods.".to_string() 
                                 })
                         }
                     }
@@ -382,7 +409,30 @@ impl TypeChecker {
 
             Stmt::Expression { value } => {self.infer(value)?; Ok(())}
 
-            Stmt::Print { value } => {self.infer(value)?; Ok(())}
+            Stmt::Print { value } => {
+                let result = self.infer(value)?; 
+                match result {
+                    Type::Named(str) => {
+                        match self.types.get(&str) {
+                            Some(TypeInfo::Enum { .. }) => {
+                                Ok(())
+                            }
+
+                            Some(TypeInfo::Struct { .. }) => {
+                                return Err(TypeError { 
+                                    span: Self::expr_span(value),
+                                    message: "Cannot print structs. (yet)".to_string() 
+                                })}
+
+                            None => {return Err(TypeError { 
+                                span: Self::expr_span(value),
+                                message: "Unknown type.".to_string() 
+                            })}
+                        }
+                    }
+                    _ => Ok(())
+                }
+            }
 
             Stmt::Let { name, value, kind: _, var_type } => {
                 let ty = self.infer(value)?;
@@ -935,7 +985,7 @@ mod tests {
         let result = check_all_source("struct S { x: int } let mut y: S = S { x: 10, }; if (y.x == true) { print(1); }");
         match result {
             Err(e) => {
-                assert!(e.message.contains("Comparison operands must be numeric,"))
+                assert!(e.message.contains("Invalid comparison operands, got "))
             }
             Ok(()) => panic!("Expected error")   
         }
@@ -1014,5 +1064,69 @@ mod tests {
             }
             Ok(()) => panic!("Expected error")   
         }
+    }
+
+    #[test]
+    fn test_struct_print_err() {
+        let result = check_all_source("struct S { x: int } let mut s: S = S {x: 5}; print(s);");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Cannot print structs. (yet)"))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_enum_print() {
+        assert!(check_all_source("enum Color {R, G, B} let const green: Color = Color::G; print(green);").is_ok())
+    }
+
+    #[test]
+    fn test_struct_comparison_err() {
+        let result = check_all_source("struct S { x: int } let mut s: S = S {x: 5}; let const x: S = S {x: 4}; while (s != x) { print(\"not ok\"); }");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("Cannot compare structs. (yet)"))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_enum_comparison() {
+        assert!(check_all_source("enum Color {R, G, B} let const green: Color = Color::G; while ( green!= Color::R) { print(\"ok\"); }").is_ok())
+    }
+
+    #[test]
+    fn test_not_func_call_err() {
+        let result = check_all_source("let const g: int = 5; g.g(4);");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("This type has no methods."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_string_comparison_err() {
+        let result = check_all_source("let const b: bool = \"string\" == \"str\";");
+        match result {
+            Err(e) => {
+                assert!(e.message.contains("String comparison is not supported, you can use char for single symbol instead."))
+            }
+            Ok(()) => panic!("Expected error")   
+        }
+    }
+
+    #[test]
+    fn test_char_comparison() {
+        assert!(check_all_source("let const b: bool = 'c' == 'c';").is_ok())
+    }
+
+    #[test]
+    fn test_bool_comparison() {
+        assert!(check_all_source("let const b: bool = false == false;").is_ok())
     }
 }

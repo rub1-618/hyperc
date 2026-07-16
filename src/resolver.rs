@@ -275,6 +275,33 @@ impl Resolver {
 
     pub fn resolve_expr(&mut self, expression: &Expr) -> Result<(), ParseError> {
         match expression {
+
+            Expr::Call { callee, arguments, .. } => {
+                for argument in arguments{
+                    self.resolve_expr(argument)?;
+                }
+                match &**callee {
+                    Expr::Variable { name } => {
+                        match self.lookup_binding(name) {
+                            Some(_) => Ok(()),
+                            None => return Err( ParseError { 
+                                span: Self::expr_span(callee), 
+                                message: "Unknown function.".to_string(),
+                            })
+                        }
+                    }
+
+                    Expr::Get { object, .. } => {
+                        self.resolve_expr(object)?;
+                        Ok(())
+                    }
+
+                    _ => return Err( ParseError { 
+                        span: Self::expr_span(callee), 
+                        message: "Not a function.".to_string(),
+                    })
+                }
+            }
             
             Expr::Variable {name} => { 
                 for scope in self.scopes.iter().rev() {
@@ -827,7 +854,7 @@ mod tests {
         let mut _resolver = resolver::Resolver::new();
         let result = _resolver.resolve_stmts(&stmts);
         match result {
-            Err (e) => assert!(e.message.contains("Invalid assignment target.")),
+            Err (e) => assert!(e.message.contains("Unknown function.")),
             Ok (()) => panic!("Expected error.")
         }
     }
@@ -856,6 +883,48 @@ mod tests {
         let result = _resolver.resolve_stmts(&stmts);
         match result {
             Err (e) => assert!(e.message.contains("'self' is outside of a method.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_unknown_var_call_err() { 
+        let mut lexer = Lexer::new("fn f(x: int){} f(y); ".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Variable not found.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_unknown_func_err() { 
+        let mut lexer = Lexer::new("gg();".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Unknown function.")),
+            Ok (()) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_literal_call_err() {
+        let mut lexer = Lexer::new("5();".to_string());
+        let _tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(_tokens.clone());
+        let stmts = _parser.parse().unwrap();
+        let mut _resolver = resolver::Resolver::new();
+        let result = _resolver.resolve_stmts(&stmts);
+        match result {
+            Err (e) => assert!(e.message.contains("Not a function.")),
             Ok (()) => panic!("Expected error.")
         }
     }

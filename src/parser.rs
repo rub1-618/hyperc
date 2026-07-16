@@ -188,11 +188,17 @@ impl Parser {
         }
 
         if self.match_token(&[TokenType::IntLit]) {
-            return Ok(Expr::Literal { value: LiteralValue::Int(self.previous().lexeme.parse::<i64>().unwrap()), span: self.previous().start..self.previous().end })
+            return Ok(Expr::Literal { value: LiteralValue::Int(self.previous().lexeme.parse::<i64>().map_err(|_| ParseError {
+                span: self.previous().start..self.previous().end,
+                message: "Integer literal is too large.".to_string()
+            })?), span: self.previous().start..self.previous().end })
         }
 
         if self.match_token(&[TokenType::FloatLit]) {
-            return Ok(Expr::Literal { value: LiteralValue::Float(self.previous().lexeme.parse::<f64>().unwrap()), span: self.previous().start..self.previous().end })
+            return Ok(Expr::Literal { value: LiteralValue::Float(self.previous().lexeme.parse::<f64>().map_err(|_| ParseError {
+                span: self.previous().start..self.previous().end,
+                message: "Float literal is too large.".to_string()
+            })?), span: self.previous().start..self.previous().end })
         }
 
         if self.match_token(&[TokenType::SelfKw]) {
@@ -1146,5 +1152,44 @@ use super::*;
         let mut _parser = Parser::new(tokens.clone());
         let stmt = _parser.parse().unwrap();
         assert!(matches!(&stmt[0], Stmt::Function { .. }));
+    }
+
+    #[test]
+    fn test_int_overflow_err() {
+        let mut lexer = Lexer::new("let const x: int = 999999999999999999999999;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse();
+        match stmt {
+            Err(e) => assert!(e.message.contains("Integer literal is too large.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+    
+    #[test]
+    fn test_float_overflow() {
+        let mut lexer = Lexer::new("let const x: float = 999999999999999.99999999999999;".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        assert!(matches!(&stmt[0], Stmt::Let { .. }));
+    }
+
+    #[test]
+    fn test_char() {
+        let mut lexer = Lexer::new("let const x: char = 'c';".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        assert!(matches!(&stmt[0], Stmt::Let { .. }));
+    }
+
+    #[test]
+    fn test_char_symbol() { // I made a decision to let ' char be in '''.
+        let mut lexer = Lexer::new("let const x: char = ''';".to_string());
+        let tokens = lexer.scan_tokens().unwrap();
+        let mut _parser = Parser::new(tokens.clone());
+        let stmt = _parser.parse().unwrap();
+        assert!(matches!(&stmt[0], Stmt::Let { .. }));
     }
 }

@@ -464,6 +464,16 @@ mod tests {
     }
 
     #[test]
+    fn test_char_none_err() {
+        let mut lexer = Lexer::new("let const x: char = '';".to_string());
+        let tokens = lexer.scan_tokens();
+        match tokens {
+            Err(e) => assert!(e.message.contains("Char must be a single character in ''.")),
+            Ok (_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
     fn test_other(){
         let mut lexer = Lexer::new("let x = 15;\nlet y = \"y\";".to_string());
         let tokens = lexer.scan_tokens().unwrap();
