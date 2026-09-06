@@ -310,134 +310,205 @@ mod tests {
     }
 
 
+
     #[test]
-    fn test_keywords() {
+    fn test_literals_ok() {
 
-        let tok = lex_source_ok("(");
-        assert_eq!(tok[0], TokenType::LeftParen);
-        let tok = lex_source_ok(")");
-        assert_eq!(tok[0], TokenType::RightParen);
-        let tok = lex_source_ok("{");
-        assert_eq!(tok[0], TokenType::LeftBrace);
-        let tok = lex_source_ok("}");
-        assert_eq!(tok[0], TokenType::RightBrace);
-        let tok = lex_source_ok("[");
-        assert_eq!(tok[0], TokenType::LeftBracket);
-        let tok = lex_source_ok("]");
-        assert_eq!(tok[0], TokenType::RightBracket);
-        let tok = lex_source_ok(",");
-        assert_eq!(tok[0], TokenType::Comma); 
-        let tok = lex_source_ok(".");
-        assert_eq!(tok[0], TokenType::Dot);
-        let tok = lex_source_ok(";");
-        assert_eq!(tok[0], TokenType::Semicolon);
-        let tok = lex_source_ok("!");
-        assert_eq!(tok[0], TokenType::Bang);
-        let tok = lex_source_ok("!=");
-        assert_eq!(tok[0], TokenType::BangEqual);
-        let tok = lex_source_ok("=");
-        assert_eq!(tok[0], TokenType::Equal);
-        let tok = lex_source_ok("==");
-        assert_eq!(tok[0], TokenType::EqualEqual);
-        let tok = lex_source_ok(">");
-        assert_eq!(tok[0], TokenType::Greater);
-        let tok = lex_source_ok(">=");
-        assert_eq!(tok[0], TokenType::GreaterEqual);
-        let tok = lex_source_ok("<");
-        assert_eq!(tok[0], TokenType::Less);
-        let tok = lex_source_ok("<=");
-        assert_eq!(tok[0], TokenType::LessEqual);
-        let tok = lex_source_ok("+");
-        assert_eq!(tok[0], TokenType::Plus);
-        let tok = lex_source_ok("-");
-        assert_eq!(tok[0], TokenType::Minus);
-        let tok = lex_source_ok("*");
-        assert_eq!(tok[0], TokenType::Star);  
-        let tok = lex_source_ok("/");
-        assert_eq!(tok[0], TokenType::Slash);
-        let tok = lex_source_ok("%");
-        assert_eq!(tok[0], TokenType::Percent);
-        let tok = lex_source_ok("->");
-        assert_eq!(tok[0], TokenType::Arrow);
-        let tok = lex_source_ok(":");
-        assert_eq!(tok[0], TokenType::Colon);
-        let tok = lex_source_ok("::");
-        assert_eq!(tok[0], TokenType::ColonColon);
-
-        let tok = lex_source_ok("x");
-        assert_eq!(tok[0], TokenType::Identifier);
         let tok = lex_source_ok("\"stringlit\"");
         assert_eq!(tok[0], TokenType::StringLit);
+
         let tok = lex_source_ok("'c'");
         assert_eq!(tok[0], TokenType::CharLit);
+
         let tok = lex_source_ok("5");
         assert_eq!(tok[0], TokenType::IntLit);
+
         let tok = lex_source_ok("3.14");
         assert_eq!(tok[0], TokenType::FloatLit);
 
+    }
+
+    #[test]
+    fn test_operators_ok() {
+
+        let tok = lex_source_ok(",");
+        assert_eq!(tok[0], TokenType::Comma); 
+
+        let tok = lex_source_ok(".");
+        assert_eq!(tok[0], TokenType::Dot);
+
+        let tok = lex_source_ok(";");
+        assert_eq!(tok[0], TokenType::Semicolon);
+
+        let tok = lex_source_ok("!");
+        assert_eq!(tok[0], TokenType::Bang);
+
+        let tok = lex_source_ok("!=");
+        assert_eq!(tok[0], TokenType::BangEqual);
+
+        let tok = lex_source_ok("=");
+        assert_eq!(tok[0], TokenType::Equal);
+        
+        let tok = lex_source_ok("==");
+        assert_eq!(tok[0], TokenType::EqualEqual);
+
+        let tok = lex_source_ok(">");
+        assert_eq!(tok[0], TokenType::Greater);
+
+        let tok = lex_source_ok(">=");
+        assert_eq!(tok[0], TokenType::GreaterEqual);
+
+        let tok = lex_source_ok("<");
+        assert_eq!(tok[0], TokenType::Less);
+
+        let tok = lex_source_ok("<=");
+        assert_eq!(tok[0], TokenType::LessEqual);
+
+        let tok = lex_source_ok("+");
+        assert_eq!(tok[0], TokenType::Plus);
+
+        let tok = lex_source_ok("-");
+        assert_eq!(tok[0], TokenType::Minus);
+
+        let tok = lex_source_ok("*");
+        assert_eq!(tok[0], TokenType::Star);  
+
+        let tok = lex_source_ok("/");
+        assert_eq!(tok[0], TokenType::Slash);
+
+        let tok = lex_source_ok("%");
+        assert_eq!(tok[0], TokenType::Percent);
+
+        let tok = lex_source_ok("->");
+        assert_eq!(tok[0], TokenType::Arrow);
+
+        let tok = lex_source_ok(":");
+        assert_eq!(tok[0], TokenType::Colon);
+
+        let tok = lex_source_ok("::");
+        assert_eq!(tok[0], TokenType::ColonColon);
+
         let tok = lex_source_ok("&&");
         assert_eq!(tok[0], TokenType::And);
+
         let tok = lex_source_ok("||");
         assert_eq!(tok[0], TokenType::Or);
 
+    }
+
+    #[test]
+    fn test_id_and_kw_ok() {
+
+        let tok = lex_source_ok("x");
+        assert_eq!(tok[0], TokenType::Identifier);
+
         let tok = lex_source_ok("if");
         assert_eq!(tok[0], TokenType::If);
+
         let tok = lex_source_ok("else");
         assert_eq!(tok[0], TokenType::Else);
+
         let tok = lex_source_ok("true");
         assert_eq!(tok[0], TokenType::True);
+
         let tok = lex_source_ok("false");
         assert_eq!(tok[0], TokenType::False);
+
         let tok = lex_source_ok("self");
         assert_eq!(tok[0], TokenType::SelfTok);
+
         let tok = lex_source_ok("for");
         assert_eq!(tok[0], TokenType::For);
+
         let tok = lex_source_ok("while");
         assert_eq!(tok[0], TokenType::While);
+
         let tok = lex_source_ok("func");
         assert_eq!(tok[0], TokenType::Func);
+
         let tok = lex_source_ok("print");
         assert_eq!(tok[0], TokenType::Print);
+
         let tok = lex_source_ok("return");
         assert_eq!(tok[0], TokenType::Return);
+
         let tok = lex_source_ok("let");
         assert_eq!(tok[0], TokenType::Let);
+
         let tok = lex_source_ok("break");
         assert_eq!(tok[0], TokenType::Break);
+
         let tok = lex_source_ok("continue");
         assert_eq!(tok[0], TokenType::Continue);
+
         let tok = lex_source_ok("struct");
         assert_eq!(tok[0], TokenType::Struct);
+
         let tok = lex_source_ok("impl");
         assert_eq!(tok[0], TokenType::Impl);
+
         let tok = lex_source_ok("enum");
         assert_eq!(tok[0], TokenType::Enum);
 
         let tok = lex_source_ok("const");
         assert_eq!(tok[0], TokenType::Const);
+
         let tok = lex_source_ok("mut");
         assert_eq!(tok[0], TokenType::Mut);
+
         let tok = lex_source_ok("fluid");
         assert_eq!(tok[0], TokenType::Fluid);
 
         let tok = lex_source_ok("int");
         assert_eq!(tok[0], TokenType::IntType);
+
         let tok = lex_source_ok("float");
         assert_eq!(tok[0], TokenType::FloatType);
+
         let tok = lex_source_ok("str");
         assert_eq!(tok[0], TokenType::StrType);
+
         let tok = lex_source_ok("char");
         assert_eq!(tok[0], TokenType::CharType);
+
         let tok = lex_source_ok("bool");
         assert_eq!(tok[0], TokenType::BoolType);
 
+    }
+
+    #[test]
+    fn test_eof_ok() {
+        
         let tok = lex_source_ok("");
         assert_eq!(tok[0], TokenType::Eof);
 
     }
 
     #[test]
-    fn test_unknown_keywords() {
+    fn test_enclosures_ok() {
+
+        let tok = lex_source_ok("(");
+        assert_eq!(tok[0], TokenType::LeftParen);
+
+        let tok = lex_source_ok(")");
+        assert_eq!(tok[0], TokenType::RightParen);
+
+        let tok = lex_source_ok("{");
+        assert_eq!(tok[0], TokenType::LeftBrace);
+
+        let tok = lex_source_ok("}");
+        assert_eq!(tok[0], TokenType::RightBrace);
+
+        let tok = lex_source_ok("[");
+        assert_eq!(tok[0], TokenType::LeftBracket);
+
+        let tok = lex_source_ok("]");
+        assert_eq!(tok[0], TokenType::RightBracket);
+
+    }
+
+    #[test]
+    fn test_operators_err() {
 
         let err = lex_source_err("&");
         match &err[0] {
@@ -455,6 +526,11 @@ mod tests {
             _ => panic!("Expected LexerError.")
         }
 
+    }
+
+    #[test]
+    fn test_char_err() {
+
         let err = lex_source_err("'err'");
         match &err[0] {
             HypercError::LexerError {message, .. } => {
@@ -470,7 +546,7 @@ mod tests {
             }
             _ => panic!("Expected LexerError.")
         }
-        
+
     }
 
 }
