@@ -45,7 +45,6 @@ impl Lexer {
 
             '+' => self.add_token(TokenType::Plus),
             '*' => self.add_token(TokenType::Star),
-            '/' => self.add_token(TokenType::Slash),
             '%' => self.add_token(TokenType::Percent),
 
             '!' => {
@@ -80,6 +79,15 @@ impl Lexer {
                 }
             }
 
+            '/' => {
+                if self.match_next('/') {
+                    while self.peek() != '\n' && !self.is_at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add_token(TokenType::Slash)
+                }
+            },
 
             '-' => {
                 if self.match_next('>') {
@@ -88,6 +96,7 @@ impl Lexer {
                     self.add_token(TokenType::Minus);
                 }
             }
+
 
             '&' => {
                 if self.match_next('&') {
@@ -477,9 +486,15 @@ mod tests {
     }
 
     #[test]
-    fn test_eof_ok() {
+    fn test_eof_and_comments_ok() {
         
         let tok = lex_source_ok("");
+        assert_eq!(tok[0], TokenType::Eof);
+
+        let tok = lex_source_ok("// comment");
+        assert_eq!(tok[0], TokenType::Eof);
+
+        let tok = lex_source_ok("// _comment //");
         assert_eq!(tok[0], TokenType::Eof);
 
     }
