@@ -22,6 +22,7 @@ pub enum Expr {
 
     Literal {
         value: LiteralValue,
+        span: Range<usize>
     },
 
     Grouping {
@@ -49,7 +50,9 @@ pub enum Expr {
 
     SelfExpr {
         self_tok: Token,
-    }
+    },
+
+    ErrorExpr,
 }
 
 #[derive(Debug, Clone)]
@@ -79,18 +82,18 @@ pub enum Stmt {
     },
 
     If {
-        params: Box<Expr>,
+        condition: Box<Expr>,
         then_branch: Box<Stmt>,
-        else_bransh: Option<Box<Expr>>,
+        else_branch: Option<Box<Stmt>>,
     },
 
     While {
-        conditions: Box<Expr>,
+        condition: Box<Expr>,
         statements: Box<Stmt>,
     },
 
     For {
-        initialization: Option<Box<Stmt>>,
+        initializer: Option<Box<Stmt>>,
         condition: Option<Box<Expr>>,
         increment: Option<Box<Stmt>>,
         statements: Box<Stmt>,
@@ -102,9 +105,9 @@ pub enum Stmt {
 
     Func {
         name: Token,
-        params: Vec<(Token, VarType)>,
-        statements: Vec<Stmt>,
-        return_type: Vec<VarType>,
+        args: Vec<(Token, VarType)>,
+        statements: Box<Stmt>,
+        return_type: Option<VarType>,
     },
 
     Struct {
@@ -130,6 +133,7 @@ pub enum LiteralValue {
     String(String),
     Char(char),
     Bool(bool),
+    None
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -137,6 +141,7 @@ pub enum VarKind {
     Mut,
     Const,
     Fluid,
+    Error
 }
 
 #[derive(Debug, Clone)]
@@ -147,4 +152,5 @@ pub enum VarType {
     Char,
     Bool,
     Named(Token),
+    Error
 }

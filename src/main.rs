@@ -11,7 +11,7 @@ mod error;
 mod resolver;
 mod checker;
 mod codegen;
-mod matching;
+mod support;
 
 #[derive(Parser)]
 #[command(version, about, name = "hyperc")]

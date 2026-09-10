@@ -44,6 +44,8 @@ pub enum TokenType {
     // StarStarEqual, SlashEqual, PercentEqual,
     // Import, From, 
 
+    Error,
+
     Eof
 }
 
