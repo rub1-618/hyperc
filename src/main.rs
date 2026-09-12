@@ -76,15 +76,24 @@ fn build (path: PathBuf, out: Option<PathBuf>, debug: bool) {
     };
 
     let mut lexer = lexer::Lexer::new(source.clone());
-    let tokens = &lexer.scan_tokens();
+    let tokens = lexer.scan_tokens();
     if !lexer.errors.is_empty() {
         report_all(&source, &lexer.errors);
         std::process::exit(exit_code(&lexer.errors[0]))
     }
 
+    let mut parser = parser::Parser::new(tokens);
+    let stmts = parser.parse();
+    if !parser.errors.is_empty() {
+        report_all(&source, &parser.errors);
+        std::process::exit(exit_code(&parser.errors[0]))
+    }
 
-    println!("{:?}", tokens);
+    println!("{:?}", stmts);
+    println!("out: {:?}", out);
+    println!("debug: {:?}", debug);
 
+    std::process::exit(0);
 }
 
 // fn run(out: Option<PathBuf>) {

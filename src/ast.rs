@@ -1,7 +1,7 @@
 use crate::token::Token;
 use std::{ops::Range, string::String};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Binary  {
         left: Box<Expr>,
@@ -55,7 +55,7 @@ pub enum Expr {
     ErrorExpr,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Expression {
         value: Box<Expr>,
@@ -126,7 +126,7 @@ pub enum Stmt {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Int(i64),
     Float(f64),
@@ -144,7 +144,7 @@ pub enum VarKind {
     Error
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum VarType {
     Int,
     Float,

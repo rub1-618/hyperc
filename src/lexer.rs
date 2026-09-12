@@ -321,7 +321,7 @@ mod tests {
 
 
     #[test]
-    fn test_literals_ok() {
+    fn test_lexer_literal_tokens_ok() {
 
         let tok = lex_source_ok("\"stringlit\"");
         assert_eq!(tok[0], TokenType::StringLit);
@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn test_operators_ok() {
+    fn test_lexer_operator_tokens_ok() {
 
         let tok = lex_source_ok(",");
         assert_eq!(tok[0], TokenType::Comma); 
@@ -406,7 +406,7 @@ mod tests {
     }
 
     #[test]
-    fn test_id_and_kw_ok() {
+    fn test_lexer_id_and_kw_tokens_ok() {
 
         let tok = lex_source_ok("x");
         assert_eq!(tok[0], TokenType::Identifier);
@@ -486,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn test_eof_and_comments_ok() {
+    fn test_lexer_eof_and_comment_tokens_ok() {
         
         let tok = lex_source_ok("");
         assert_eq!(tok[0], TokenType::Eof);
@@ -500,7 +500,7 @@ mod tests {
     }
 
     #[test]
-    fn test_enclosures_ok() {
+    fn test_lexer_enclosure_tokens_ok() {
 
         let tok = lex_source_ok("(");
         assert_eq!(tok[0], TokenType::LeftParen);
@@ -523,7 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn test_operators_err() {
+    fn test_lexer_operator_tokens_err() {
 
         let err = lex_source_err("&");
         match &err[0] {
@@ -544,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn test_char_err() {
+    fn test_lexer_char_token_err() {
 
         let err = lex_source_err("'err'");
         match &err[0] {
