@@ -1267,7 +1267,7 @@ mod tests {
     // ! -- exprs --
 
     #[test]
-    fn test_call_expr_err() {
+    fn test_parser_call_expr_err() {
         let err = parse_source_err("foo(a,b,);");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1278,7 +1278,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_expr_err() {
+    fn test_parser_get_expr_err() {
         let err = parse_source_err("p.x.;");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1289,7 +1289,7 @@ mod tests {
     }
 
     #[test]
-    fn test_structlit_expr_err() {
+    fn test_parser_structlit_expr_err() {
         let err = parse_source_err("Point { x: 5, y true }");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1300,7 +1300,7 @@ mod tests {
     }
 
     #[test]
-    fn test_path_expr_err() {
+    fn test_parser_path_expr_err() {
         let err = parse_source_err("Path::");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1311,7 +1311,7 @@ mod tests {
     }
 
     #[test]
-    fn test_intlit_expr_too_large_err() {
+    fn test_parser_intlit_expr_too_large_err() {
         let err = parse_source_err("999999999999999999999999999;");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1324,7 +1324,7 @@ mod tests {
     // ! -- stmts --
 
     #[test]
-    fn test_print_stmt_err() {
+    fn test_parser_print_stmt_err() {
         let err = parse_source_err("print(x;");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1335,7 +1335,7 @@ mod tests {
     }
 
     #[test]
-    fn test_let_declaration_stmt_err() {
+    fn test_parser_let_declaration_stmt_err() {
         let err = parse_source_err("let x: int = 4;");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1346,7 +1346,7 @@ mod tests {
     }
 
     #[test]
-    fn test_assignment_stmt_err() {
+    fn test_parser_assignment_stmt_err() {
         let err = parse_source_err("5 = x;");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1357,7 +1357,7 @@ mod tests {
     }
 
     #[test]
-    fn test_block_stmt_err() {
+    fn test_parser_block_stmt_err() {
         let err = parse_source_err("{ 5; ");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1368,7 +1368,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if_stmt_err() {
+    fn test_parser_if_stmt_err() {
         let err = parse_source_err("if true {  }");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1379,7 +1379,7 @@ mod tests {
     }
 
     #[test]
-    fn test_while_stmt_err() {
+    fn test_parser_while_stmt_err() {
         let err = parse_source_err("while ( 5 > 3 {  }");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1390,7 +1390,7 @@ mod tests {
     }
 
     #[test]
-    fn test_for_stmt_err() {
+    fn test_parser_for_stmt_err() {
         let err = parse_source_err("for ( val = 3; val > 5 ) {  }");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1401,7 +1401,7 @@ mod tests {
     }
 
     #[test]
-    fn test_func_stmt_err() {
+    fn test_parser_func_stmt_err() {
         let err = parse_source_err("func foo(a: int,) {  }");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1412,7 +1412,7 @@ mod tests {
     }
 
     #[test]
-    fn test_return_stmt_err() {
+    fn test_parser_return_stmt_err() {
         let err = parse_source_err("return 5");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1423,7 +1423,7 @@ mod tests {
     }
 
     #[test]
-    fn test_struct_stmt_err() {
+    fn test_parser_struct_stmt_err() {
         let err = parse_source_err("struct {}");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1434,7 +1434,7 @@ mod tests {
     }
 
     #[test]
-    fn test_impl_stmt_err() {
+    fn test_parser_impl_stmt_err() {
         let err = parse_source_err("impl Something { var; }");
         match &err[0] {
             HypercError::ParseError { message, .. } => {
@@ -1445,7 +1445,7 @@ mod tests {
     }
 
     #[test]
-    fn test_enum_stmt_err() {
+    fn test_parser_enum_stmt_err() {
         let err = parse_source_err("enum C { cpp cs }");
         match &err[0] {
             HypercError::ParseError { message, .. } => {

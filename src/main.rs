@@ -89,6 +89,16 @@ fn build (path: PathBuf, out: Option<PathBuf>, debug: bool) {
         std::process::exit(exit_code(&parser.errors[0]))
     }
 
+    let mut resolver = resolver::Resolver::new();
+    resolver.resolve(&stmts);
+    if !resolver.errors.is_empty() {
+        report_all(&source, &resolver.errors);
+        std::process::exit(exit_code(&resolver.errors[0]))
+    }
+    
+    let types = resolver.get_types();
+
+
     println!("{:?}", stmts);
     println!("out: {:?}", out);
     println!("debug: {:?}", debug);
