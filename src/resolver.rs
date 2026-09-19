@@ -89,8 +89,8 @@ impl Resolver {
             }
         
             Stmt::Let { 
-                name, value, 
-                var_kind, var_type 
+                name, value,
+                var_kind, var_type
             } => {
                 self.declare_variable(name, var_kind.clone());
                 self.check_type_exists(var_type);
@@ -109,7 +109,7 @@ impl Resolver {
                                         if *kind == VarKind::Const {
                                             self.errors.push(HypercError::ResolveError {
                                                 span: name.start..name.end,
-                                                message: "Cannot assign to const variable.".to_string()
+                                                message: "Cannot assign to a const variable.".to_string()
                                             })
                                         }
                                     }
@@ -293,7 +293,7 @@ impl Resolver {
                     if variants_vec.contains(&variant.lexeme) {
                         self.errors.push(HypercError::ResolveError {
                             span: variant.start..variant.end,
-                            message: "This variant is already declared".to_string()
+                            message: "This variant is already declared.".to_string()
                         });
                     }
                     variants_vec.push(variant.lexeme.clone());
@@ -357,27 +357,21 @@ impl Resolver {
             }
 
             Expr::Variable { name } => {
-                for scope in self.scopes.iter().rev() {
-                    match scope.get(&name.lexeme) {
-                        Some(binding) => {
-                            match binding {
-                                Binding::Variable { ready, .. } => {
-                                    if !*ready {
-                                        self.errors.push(HypercError::ResolveError {
-                                            span: name.start..name.end,
-                                            message: "Variable is used in self declarement.".to_string()
-                                        });
-                                    }
-                                }
-                                Binding::Func => {}
-                            }
-                        }
-                        None => {
+                match self.get_binding(name) {
+                    Some(Binding::Variable { ready, .. }) => {
+                        if !*ready {
                             self.errors.push(HypercError::ResolveError {
-                                span: name.start..name.end, 
-                                message: "Variable not found.".to_string()
+                                span: name.start..name.end,
+                                message: "Variable is used in self declarement.".to_string()
                             });
                         }
+                    }
+                    Some(Binding::Func) => {}
+                    None => {
+                        self.errors.push(HypercError::ResolveError {
+                            span: name.start..name.end, 
+                            message: "Variable or method not found.".to_string()
+                        });
                     }
                 }
             }
@@ -504,6 +498,10 @@ impl Resolver {
                     message: "Already declared.".to_string()
                 });
             }
+            scope.insert(
+                name.lexeme.clone(), 
+                Binding::Func
+            );
         }
     }
 
@@ -592,9 +590,731 @@ mod tests {
         Ok(result)
     }
 
+    fn resolve_source_with_main(src: &str) -> Result<(), Vec<HypercError>> {
+        let mut lexer = lexer::Lexer::new(src.to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = parser::Parser::new(tokens);
+        let stmts = parser.parse();
+        let mut resolver = resolver::Resolver::new();
+        let result = resolver.resolve(&stmts);
+        if !resolver.errors.is_empty() {
+            return Err(resolver.errors);
+        }
+        Ok(result)
+    }
+
+    // ! -- exprs --
+
     #[test]
-    fn test_resolver_let_stmt_ok() {
+    fn test_resolver_call_expr_ok() {
+        // func
+        let result = resolve_source("
+            func foo() {}
+            foo();
+        ");
+        assert!(result.is_ok());
+
+        // path
+        let result = resolve_source("
+            struct Struct {} impl Struct { func new() {} }
+            Struct::new();
+        ");
+        assert!(result.is_ok());
+
+        // get
+        let result = resolve_source("
+            struct Struct {} impl Struct { func new() {} }
+            let mut s: Struct = Struct {};
+            s.new();
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_variable_expr_ok() {
+        let result = resolve_source("let const x: int = 5; x;");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_structlit_expr_ok() {
+        let result = resolve_source("
+            struct Type { y: int }
+            let const x: Type = Type { y: 5 };
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_get_expr_ok() {
+        let result = resolve_source("
+            struct Type { y: int }
+            let mut x: Type = Type { y: 5 };
+            x.y = 5;
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_rseolver_path_expr_ok() {
+        // enum
+        let result = resolve_source("
+            enum Color { Red, Green, Blue }
+            let mut x: Color = Color::Red;
+            Color::Blue;
+        ");
+        assert!(result.is_ok());
+        
+        // impl
+        let result = resolve_source("
+            struct Type { x: int }
+            impl Type { func new() {} }
+            let fluid x: Type = Type::new();
+            Type::new();
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_self_expr_ok() {
+        let result = resolve_source("
+            struct Type { y: int }
+            impl Type {
+                func new() {
+                    print(self.y);
+                }
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    // ! -- stmts --
+
+    #[test]
+    fn test_resolver_expr_stmt_ok() {
+        let result = resolve_source("5 + 1;");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_print_stmt_ok() {
+        let result = resolve_source("print(\"Hello world!\");");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_let_declaration_stmt_ok() {
         let result = resolve_source("let fluid x: int = 5;");
-        assert!(result.is_ok())
+        assert!(result.is_ok());
+
+        // get
+        let result = resolve_source("
+            struct Type { x: int }
+            let const y: Type = Type { x: 5 };
+            let fluid x: int = y.x;
+        ");
+        assert!(result.is_ok());
+
+        // path
+        let result = resolve_source("
+            enum Color { Red, Green, Blue }
+            let fluid x: Color = Color::Red;
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_assign_stmt_ok() {
+        let result = resolve_source("let fluid x: int = 5; x = 10;");
+        assert!(result.is_ok());
+        
+        //get
+        let result = resolve_source("
+            struct Type { x: int }
+            let const y: Type = Type { x: 5 };
+            let fluid x: int = 5;
+            x = y.x;
+        ");
+        assert!(result.is_ok());
+
+        // path
+        let result = resolve_source("
+            enum Color { Red, Green, Blue }
+            let fluid x: Color = Color::Red;
+            x = Color::Green;
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_block_stmt_ok() {
+        let result = resolve_source("
+        let mut y: int = 10;
+        {
+            y = 5;
+            let mut x: int = 5;
+            x = 6;
+            enum C { C, Cpp }
+            func foo() { let mut x: int = 10; x = 8; }
+        }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_if_stmt_ok() {
+        let result = resolve_source("
+        if ( 5 > 3 ) {
+            let mut x: char = 'c';
+            x = '5';
+        }
+        ");
+        assert!(result.is_ok());
+
+        let result = resolve_source("
+        if ( 5 > 3 ) {
+            let mut x: int = 5;
+            x = 6;
+        } else {
+            enum C { C, Cpp }
+            func foo() { let mut x: int = 10; x = 8; }
+        }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_while_stmt_ok() {
+        let result = resolve_source("
+            let mut x: int = 0;
+            while ( x < 10 ) {
+                print(x);
+                x = x + 1;
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_for_stmt_ok() {
+        let result = resolve_source("
+            for ( let mut i: int = 0; i < 10; i = i + 1; ) {
+                print(\"Hello world!\");
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_func_stmt_ok() {
+        let result = resolve_source("
+            func foo(a: int) {
+                print(a + 1);
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_return_stmt_ok() {
+        let result = resolve_source("
+            func foo(a: int) -> int {
+                print(a + 1);
+                return a + 2;
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_struct_stmt_ok() {
+        let result = resolve_source("
+            struct Type {
+                x: int,
+                y: char,
+                z: bool
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_impl_stmt_ok() {
+        let result = resolve_source("
+            struct Type {
+                x: int
+            }
+
+            impl Type {
+                func set_x(a: int) {
+                    return self.x = a;
+                } 
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_enum_stmt_ok() {
+        let result = resolve_source("
+            enum Color {
+                Red,
+                Green,
+                Blue
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    // ! -- err tests --
+
+    // ! -- exprs --
+
+    #[test]
+    fn test_resolver_call_expr_err() {
+        let result = resolve_source("foo();");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Function not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("p.x.b();");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variable or method not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func foo() {}
+            }
+            Type::new();
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Method not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_variable_expr_err() {
+        let result = resolve_source("x;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variable or method not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_structlit_expr_err() {
+        let result = resolve_source("
+            enum Color {
+                Red,
+                Green,
+                Blue
+            }
+            let fluid x: Color = Color { };
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Expected struct, got enum.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("
+            struct Type {
+                x: int
+            }
+            let mut x: Type = Type { x: 6, x: 5 };
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "This field is already declared.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("
+            let mut x: Type = Type { x: 5 };
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Type not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_parser_get_expr_err() {
+        let result = resolve_source("p.x;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variable or method not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_parser_path_expr_err() {
+        let result = resolve_source("
+            enum Color {
+                Red,
+                Green,
+                Blue,
+            }
+            Color::Purple;
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variant not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("
+            struct Type {
+                x: int
+            }
+            Type::x;
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "You can path only to methods with this type.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("
+            Type::new();
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Impl type not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    // ! -- stmts --
+
+    #[test]
+    fn test_resolver_let_declaration_stmt_err() {
+        let result = resolve_source("let const x: int = x;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variable is used in self declarement.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_assign_stmt_err() {
+        let result = resolve_source("x = 5;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variable not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("let const x: int = 5; x = 10;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Cannot assign to a const variable.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("func foo(a: int) { a = 5; }");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Cannot assign function or its arguments.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_block_stmt_err() {
+        let result = resolve_source("
+            {
+                let mut x: int = 5;
+            }
+            x = 10;
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variable not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_for_stmt_err() {
+        let result = resolve_source("
+            while (let mut i: int; i < 3; i = i + 1) {
+                print(i);
+            }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Variable or method not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_struct_stmt_err() {
+        let result = resolve_source("
+            struct Type {
+                x: int
+            }
+            struct Type {
+                y: float
+            } 
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "This type is already declared.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("
+            struct Type {
+                x: int,
+                x: float
+            }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "This field is already declared.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_impl_stmt_err() {
+        let result = resolve_source("
+            impl Type {
+                func new() {}
+            }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Type not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_enum_stmt_err() {
+        let result = resolve_source("
+            struct Type {
+                x:int
+            }
+            enum Type {
+                Something
+            }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "This type is already declared.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = resolve_source("
+            enum Color {
+                Red, Red
+            }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "This variant is already declared.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    // ! -- others --
+
+    #[test]
+    fn test_resolver_main_func_stmt_ok() {
+        let result = resolve_source_with_main("func main() {}");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_main_func_stmt_err() {
+        let result = resolve_source_with_main("func foo() {}");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "'main' function not found.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_resolver_top_level_ok() {
+        let result = resolve_source_with_main("
+            func foo() {}
+            struct Struct { x: int }
+            impl Struct { func new() {} }
+            enum Color { Red, Green, Blue }
+            func main() {}
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolver_top_level_err() {
+        let result = resolve_source_with_main("x = 5;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::ResolveError { message, .. } => {
+                        assert_eq!(message, "Only functions, structs, impls and enums are top-level-supported.")
+                    }
+                    _ => panic!("Expected ResolveError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
     }
 }

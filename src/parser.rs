@@ -1101,30 +1101,31 @@ mod tests {
     #[test]
     fn test_parser_for_stmt_ok() {
 
-        let stmts = parse_source_ok("for (i = 5; i < 3;) {  }");
-        let _initializer = Some(Box::new(Stmt::Assign { 
-            target: Box::new(Expr::Variable { 
-                name: Token { 
-                    token_type: TokenType::Identifier, 
-                    lexeme: "i".to_string(), 
-                    start: 5, 
-                    end: 6 
-            }}),
-            value: Box::new(Expr::Literal { value: LiteralValue::Int(5), span: 9..10 })
+        let stmts = parse_source_ok("for ( let mut i: int = 0; i < 10;) {  }");
+        let _initializer = Some(Box::new(Stmt::Let { 
+            name: Token { 
+                token_type: TokenType::Identifier,
+                lexeme: "i".to_string(), 
+                start: 14, 
+                end: 15 
+            }, 
+            value: Box::new(Expr::Literal { value: LiteralValue::Int(0), span: 23..24 }), 
+            var_kind: VarKind::Mut, 
+            var_type: VarType::Int
         }));
         let _condition = Some(Box::new(Expr::Binary { 
             left: Box::new(Expr::Variable { 
                 name: Token { 
                     token_type: TokenType::Identifier, 
                     lexeme: "i".to_string(), 
-                    start: 12, end: 13 
+                    start: 26, end: 27 
             }}), 
             operator: Token { 
                 token_type: TokenType::Less, 
                 lexeme: "<".to_string(), 
-                start: 14, end: 15 
+                start: 28, end: 29 
             }, 
-            right: Box::new(Expr::Literal { value: LiteralValue::Int(3), span: 16..17 }) 
+            right: Box::new(Expr::Literal { value: LiteralValue::Int(10), span: 30..32 }) 
         }));
         let _statements = Box::new(Stmt::Block { statements: vec![] });
         match &stmts[0] {
@@ -1262,7 +1263,7 @@ mod tests {
         }
     }
 
-    // ! -- err parsing tests --
+    // ! -- err tests --
 
     // ! -- exprs --
 
@@ -1322,6 +1323,17 @@ mod tests {
     }
 
     // ! -- stmts --
+    
+    #[test]
+    fn test_parser_expr_stmt_err() {
+        let err = parse_source_err("x");
+        match &err[0] {
+            HypercError::ParseError { message, .. } => {
+                assert_eq!(message, "Expected ';' after expression.");
+            }
+            _ => panic!("Expected ParseError.")
+        }
+    }
 
     #[test]
     fn test_parser_print_stmt_err() {
