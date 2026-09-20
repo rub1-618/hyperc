@@ -426,7 +426,7 @@ impl Parser {
         let mut expr = self.unary();
 
         while self.match_token(&[
-                TokenType::Star, TokenType::Slash
+                TokenType::Star, TokenType::Slash, TokenType::Percent
             ]) {
             let operator = self.peek_prev().clone();
             let right = self.unary();
@@ -467,6 +467,7 @@ impl Parser {
                     arguments.push(self.expression());
                 }
             }
+            self.consume(TokenType::RightParen, "Expected ')' after arguments.");
             Expr::Call { callee: Box::new(callee), arguments }
         }
 

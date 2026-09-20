@@ -80,7 +80,7 @@ impl TypeChecker {
                 match operator.token_type {
                     TokenType::Plus | TokenType::Minus
                     | TokenType::Star | TokenType::Slash => {
-                        if (lt == Type::Int || rt == Type::Float) 
+                        if (lt == Type::Int || lt == Type::Float) 
                         && (rt == Type::Int || rt == Type::Float) {
                             if lt == Type::Float || rt == Type::Float {
                                 return Type::Float;
@@ -210,7 +210,7 @@ impl TypeChecker {
                         } else if rt == Type::Float {
                             return Type::Float;
                         } else {
-                            self.errors.push(HypercError::BuildError {
+                            self.errors.push(HypercError::TypeError {
                                 span: expr_span(expr),
                                 message: format!("Expected numeric operand after '-', got {rt}.")
                             });
@@ -222,7 +222,7 @@ impl TypeChecker {
                         if rt == Type::Bool {
                             return Type::Bool;
                         } else {
-                            self.errors.push(HypercError::BuildError {
+                            self.errors.push(HypercError::TypeError {
                                 span: expr_span(expr),
                                 message: format!("Expected boolean operand after '!', got {rt}.")
                             });
@@ -327,7 +327,7 @@ impl TypeChecker {
                             None => {
                                 self.errors.push(HypercError::TypeError {
                                     span: expr_span(expr),
-                                    message: "Type or its method not found.".to_string()
+                                    message: "Type or its variant not found.".to_string()
                                 });
                                 return Type::Error;
                             }
@@ -494,7 +494,13 @@ impl TypeChecker {
             
             }
             
-            _ => unreachable!()
+            _ => {
+                self.errors.push(HypercError::TypeError {
+                    span: expr_span(expr),
+                    message: format!("Unknown expression.")
+                });
+                return Type::Error;
+            }
         }
     }
 
@@ -575,7 +581,7 @@ impl TypeChecker {
                 } else {
                     self.errors.push(HypercError::TypeError {
                         span: expr_span(condition),
-                        message: format!("If condition must be boolean, got: {cond}")
+                        message: format!("If condition must be boolean, got: {cond}.")
                     })
                 }
             }
@@ -587,7 +593,7 @@ impl TypeChecker {
                 } else {
                     self.errors.push(HypercError::TypeError {
                         span: expr_span(condition),
-                        message: format!("While condition must be boolean, got: {cond}")
+                        message: format!("While condition must be boolean, got: {cond}.")
                     })
                 }
             }
@@ -606,7 +612,7 @@ impl TypeChecker {
                         } else {
                             self.errors.push(HypercError::TypeError {
                                 span: expr_span(cond),
-                                message: format!("While condition must be boolean, got: {got}")
+                                message: format!("For condition must be boolean, got: {got}.")
                             })
                         }
                     }
@@ -682,7 +688,7 @@ impl TypeChecker {
     ) {
         let prev_st = self.current_self_type.take();
         let prev_rt = self.current_return_type.take();
-        self.current_return_type = if is_method {
+        self.current_self_type = if is_method {
             prev_st.clone()
         } else { None };
         let key_owner = match named {
@@ -754,7 +760,6 @@ impl TypeChecker {
                     None => false
                 }
             }
-
             _ => false
         }
     }
@@ -775,4 +780,743 @@ impl TypeChecker {
     fn end_scope(&mut self) {
         self.scopes.pop();
     }
+}
+
+// ! -- tests --
+
+#[cfg(test)]
+mod tests {
+    use crate::error::HypercError;
+    use crate::*;
+
+    fn check_source(src: &str) -> Result<(), Vec<HypercError>> {
+        let mut lexer = lexer::Lexer::new(src.to_string());
+        let tokens = lexer.scan_tokens();
+        let mut parser = parser::Parser::new(tokens);
+        let stmts = parser.parse();
+        let mut resolver = resolver::Resolver::new();
+        resolver.resolve(&stmts);
+        let types = resolver.get_types();
+        let mut checker = checker::TypeChecker::new(types);
+        let result = checker.check(&stmts);
+        if !checker.errors.is_empty() {
+            return Err(checker.errors);
+        }
+        Ok(result)
+    }
+
+    // ! -- exprs --
+
+    #[test]
+    fn test_checker_binary_expr_ok() {
+
+        // arithmetical
+        let result = check_source("
+            1 + 1;
+            3 + 6;
+            2 * 5;
+            5 / 2;
+            10 % 5;
+
+            1.7 + 1.3;
+            3.4 + 6.4;
+            2.3 * 5.0;
+            5.0 / 2.5;
+
+            1 + 1.3;
+            3.4 + 6;
+            2 * 5.0;
+            5.0 / 2;
+        ");
+
+        // logic
+        assert!(result.is_ok());
+
+        let result = check_source("
+            true || false;
+            true && false;
+            true == true;
+            false != false;
+
+            5 > 3;
+            2 < 4;
+            0 >= 0;
+            1 <= 9;
+            5 == 5;
+            10 != 7;
+
+            5.0 > 3.9;
+            2.4 < 4.1;
+            0.0 >= 0.0;
+            1.3 <= 9.4;
+            5.8 == 5.8;
+            10.7 != 7.5;
+
+            5.6 > 3;
+            2.9 < 4;
+            0 >= 0.0;
+            1 <= 9.5;
+            5.2 == 5;
+            10 != 7.0;
+
+            'c' == 'c';
+            'w' != 'c';
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_unary_expr_ok() {
+        let result = check_source("-5; -0.1;");
+        assert!(result.is_ok());
+        
+        let result = check_source("!true; !false;");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_call_expr_ok() {
+        
+        // var
+        let result = check_source("
+            func foo(a: int) -> int { return a; }
+            foo(5);
+        ");
+        assert!(result.is_ok());
+
+        // get
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func new(a: int) -> Type {
+                    return Type { x: a };
+                }
+            }
+            let mut p: Type = Type { x: 4 };
+            p.new(2);
+        ");
+        assert!(result.is_ok());
+
+        // path
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func new(a: int) -> Type {
+                    return Type { x: a };
+                }
+            }
+            Type::new(5);
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_literal_expr_ok() {
+        let result = check_source("
+            5; 
+            3.14;
+            \"str\"; 
+            'c';
+            true;
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_variable_expr_ok() {
+        let result = check_source("
+            let mut x: int = 4;
+            x;
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_structlit_expr_ok() {
+        let result = check_source("
+            struct Type {
+                x: int,
+                y: float,
+                z: bool
+            }
+            let mut p: Type = Type { x: 6, y: 1.2, z: true };
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_get_expr_ok() {
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            let const type: Type = Type { x: 5 };
+            type.x;
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_self_expr_ok() {
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func increase(a: float) -> float {
+                    return self.x + a;
+                }
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    // ! -- stmts --
+
+    #[test]
+    fn test_checker_assign_stmt_ok() {
+        let result = check_source("
+            let mut x: int = 5;
+            x = 10;
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_if_stmt_ok() {
+        let result = check_source("
+            let mut x: int = 5;
+            if (x > 3) {
+                x = 10;
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_while_stmt_ok() {
+        let result = check_source("
+            let mut x: int = 5;
+            while (x < 10) {
+                x = x + 1;
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_for_stmt_ok() {
+        let result = check_source("
+            for (let mut i: int = 0; i < 5;) {
+                print(\"Hello world!\");
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_func_stmt_ok() {
+        let result = check_source("
+            func foo(a: int) -> int {
+                let mut x: int = a + 10;
+                return x;
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_checker_impl_stmt_ok() {
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func foo(a: int) -> int {
+                    let mut x: int = a + self.x;
+                    return x;
+                }
+            }
+        ");
+        assert!(result.is_ok());
+    }
+
+    // ! -- err tests --
+
+    // ! -- exprs --
+
+    #[test]
+    fn test_checker_binary_expr_err() {
+        let result = check_source("5 + true;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Both arithmetic operands must be numeric, got: int and bool.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = check_source("5.0 % 1.2;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Both modulo operands must be integers, got: float and float.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = check_source("false >= 'c';");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Both comparison operands must be numeric, got: bool and char.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = check_source("'c' != 8.7;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Invalid comparison operands, got char and float.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = check_source("4 && 5;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Both logical operands must be boolean, got: int and int.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_unary_expr_err() {
+ 
+        let result = check_source("-true;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Expected numeric operand after '-', got bool.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+ 
+        let result = check_source("!13;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Expected boolean operand after '!', got int.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_call_expr_err() {
+ 
+        // var
+        let result = check_source("
+            func foo(a: int, b: float) {}
+            foo(5);
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Wrong number of arguments.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+        let result = check_source("
+            func foo(a: char, b: int) {}
+            foo(true, 5);
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Argument type mismatched. Expected: char, got: bool.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+ 
+        // get
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func foo(b: bool) {
+                    print(b);
+                } 
+            }
+            let mut p: Type = Type { x: 5 };
+            p.foo(true, 5);
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Wrong number of arguments.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func foo(b: bool) {
+                    print(b);
+                } 
+            }
+            let mut p: Type = Type { x: 5 };
+            p.foo(5);
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Argument type mismatched. Expected: bool, got: int.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        // path
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func foo(b: bool) {
+                    print(b);
+                } 
+            }
+            Type::foo(true, false);
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Wrong number of arguments.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            impl Type {
+                func foo(a: int) {
+                    print(a);
+                } 
+            }
+            Type::foo(10.5);
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Argument type mismatched. Expected: int, got: float.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_structlit_expr_err() {
+
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            let const x: Type = Type { x: 1, y: 2 }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Wrong number of fields. Expected: 1, got: 2.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+        
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            let const x: Type = Type { x: true }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Mismatched types. Expected: int, got: bool.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+        
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            let const x: Type = Type { z: true }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Unknown field.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_get_expr_err() {
+
+        let result = check_source("
+            enum Color {
+                Red,
+                Green,
+                Blue
+            }
+            let mut x: Color = Color::Red;
+            x.color;
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Type Color has no fields, only variants.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+        
+        let result = check_source("
+            struct Type {
+                x: int
+            }
+            let const x: Type = Type { x: 10 };
+            x.z;
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Unknown field.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_self_expr_err() {
+        let result = check_source("self.x;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "'self' is outside of a method.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    // ! -- stmts --
+
+    #[test]
+    fn test_checker_let_declaration_stmt_err() {
+        let result = check_source("let mut x: int = true;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Mismatched types. Expected: int, got: bool.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    // don't touch assign, it's planned for the future 'fluid'
+
+    #[test]
+    fn test_checker_if_stmt_err() {
+        let result = check_source("if (5 + 5) {}");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "If condition must be boolean, got: int.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_while_stmt_err() {
+        let result = check_source("while ('c') {}");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "While condition must be boolean, got: char.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_for_stmt_err() {
+        let result = check_source("
+            for (let mut i: int = 0; 'c';) {}
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "For condition must be boolean, got: char.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    #[test]
+    fn test_checker_return_stmt_err() {
+
+        let result = check_source("
+            func foo(a: int) -> bool {
+                return a;
+            }
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Mismatched return type. Expected: bool, got: int.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+
+        let result = check_source("
+            return 5;
+        ");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Return must be inside a function.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
+    // ! -- others --
+
+    #[test]
+    fn test_checker_unknown_expr_err() {
+        let result = check_source("5 & true;");
+        match result {
+            Err(e) => {
+                match &e[0] {
+                    HypercError::TypeError { message, .. } => {
+                        assert_eq!(message, "Unknown expression.");
+                    }
+                    _ => panic!("Expected TypeError.")
+                }
+            }
+            Ok(_) => panic!("Expected error.")
+        }
+    }
+
 }
