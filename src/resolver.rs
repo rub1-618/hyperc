@@ -212,7 +212,7 @@ impl Resolver {
                 self.resolve_func_body(name, args, statements, return_type, false);
             }
 
-            Stmt::Return { value } => {
+            Stmt::Return { value, .. } => {
                 if let Some(expr) = value {
                     self.resolve_expr(expr);
                 }
@@ -451,7 +451,7 @@ impl Resolver {
     statements: &Box<Stmt>, return_type: &Option<VarType>, is_method: bool) {
         self.declare_func(name);
         self.define(name);
-        let prev_state = self.in_method;
+        let prev_st = self.in_method;
         self.in_method = is_method;
         if let Some(rt) = return_type {
             self.check_type_exists(rt);
@@ -468,7 +468,7 @@ impl Resolver {
             self.resolve_stmt(statements);
         })();
         self.end_scope();
-        self.in_method = prev_state;
+        self.in_method = prev_st;
         result
     }
 

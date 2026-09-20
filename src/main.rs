@@ -97,6 +97,12 @@ fn build (path: PathBuf, out: Option<PathBuf>, debug: bool) {
     }
     
     let types = resolver.get_types();
+    let mut checker = checker::TypeChecker::new(types);
+    checker.check(&stmts);
+    if !checker.errors.is_empty() {
+        report_all(&source, &checker.errors);
+        std::process::exit(exit_code(&checker.errors[0]))
+    }
 
 
     println!("{:?}", stmts);

@@ -264,6 +264,7 @@ impl Parser {
     // return
 
     fn return_statement(&mut self) -> Stmt {
+        let ret_tok = self.peek_prev().clone();
         let value = if self.check(TokenType::Semicolon) {
             None
         } else {
@@ -271,7 +272,7 @@ impl Parser {
         };
 
         self.consume(TokenType::Semicolon, "Expected ';' after return.");
-        Stmt::Return { value }
+        Stmt::Return { value, ret_tok }
     }
 
     // struct
@@ -466,13 +467,12 @@ impl Parser {
                     arguments.push(self.expression());
                 }
             }
-            let paren = self.consume(TokenType::RightParen, "Expected ')' in function call.");
-            Expr::Call { callee: Box::new(callee), arguments, paren }
+            Expr::Call { callee: Box::new(callee), arguments }
         }
 
         fn finish_get(&mut self, expr: Expr) -> Expr {
-            let field = self.consume(TokenType::Identifier, "Expected an identifier after '.'.");
-            Expr::Get { object: Box::new(expr), field }
+            let item = self.consume(TokenType::Identifier, "Expected an identifier after '.'.");
+            Expr::Get { object: Box::new(expr), item }
         }
 
     fn primary(&mut self) -> Expr {
@@ -1182,7 +1182,7 @@ mod tests {
             value: LiteralValue::Char('c'), span: 7..10 
         }));
         match &stmts[0] {
-            Stmt::Return { value } => {
+            Stmt::Return { value, .. } => {
                 assert_eq!(value, &_value);
             }
             _ => panic!("Expected expression statement.")

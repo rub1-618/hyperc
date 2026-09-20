@@ -17,7 +17,6 @@ pub enum Expr {
     Call {
         callee: Box<Expr>,
         arguments: Vec<Expr>,
-        paren: Token,
     },
 
     Literal {
@@ -40,7 +39,7 @@ pub enum Expr {
 
     Get {
         object: Box<Expr>,
-        field: Token,
+        item: Token,
     },
 
     Path {
@@ -101,6 +100,7 @@ pub enum Stmt {
 
     Return {
         value: Option<Box<Expr>>,
+        ret_tok: Token
     },
 
     Func {
