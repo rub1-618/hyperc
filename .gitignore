@@ -1,3 +1,10 @@
+// custom folder
+.directory
+
+// ! bins
+out
+out.o
+
+// testing + others
 /target
 test.hr
-.directory

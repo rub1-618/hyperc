@@ -403,9 +403,7 @@ impl Resolver {
                 }
             }
 
-            Expr::Get { object, .. } => {
-                self.resolve_expr(object);
-            }
+            Expr::Get { object, .. } => self.resolve_expr(object),
 
             Expr::Path { type_name, item } => {
                 match self.types.get(&type_name.lexeme) {

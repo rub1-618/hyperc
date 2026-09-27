@@ -8,7 +8,7 @@ pub enum HypercError {
     ResolveError    { span: Range<usize>, message: String },
     TypeError       { span: Range<usize>, message: String },
     CompileError    { span: Range<usize>, message: String },
-    BuildError      { span: Range<usize>, message: String },
+    BuildError      { message: String },
 }
 
 pub fn report_error(source: &str, error: &HypercError) {
@@ -17,9 +17,11 @@ pub fn report_error(source: &str, error: &HypercError) {
         HypercError::ParseError { span, message }   |
         HypercError::ResolveError { span, message } |
         HypercError::TypeError { span, message }    |
-        HypercError::CompileError { span, message } |
-        HypercError::BuildError { span, message } => {
+        HypercError::CompileError { span, message }=> {
             proceed_error(source, span, message);
+        }
+        HypercError::BuildError { message, .. } => {
+            panic!("[BuildError] {message}")
         }
     }
 }
