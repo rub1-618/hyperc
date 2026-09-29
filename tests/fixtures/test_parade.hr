@@ -1,0 +1,9 @@
+func main() -> int {
+    print(-10);
+    print("hi");
+    print(0.0);
+    print(!true);
+    print('c');
+
+    return 0;
+}

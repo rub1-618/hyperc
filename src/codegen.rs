@@ -4,6 +4,7 @@ use crate::error::HypercError;
 use crate::support::{expr_span, stmt_span, is_comparison, mangle};
 use std::path::Path;
 use std::{
+    path::PathBuf,
     process::Command,
     collections::HashMap
 };
@@ -66,7 +67,7 @@ impl <'ctx>Codegen<'ctx> {
     pub fn compile(&mut self, 
         stmts: &[Stmt], path: &str, 
         out: &str, is_debug: bool
-    ) -> Result<(), HypercError> {
+    ) -> Result<PathBuf, HypercError> {
         for stmt in stmts {
             self.compile_stmt(stmt)?;
         }
@@ -82,8 +83,8 @@ impl <'ctx>Codegen<'ctx> {
                 })
             }
         }
-        self.emit_obj(path, out)?;
-        Ok(())
+        let bin_path = self.emit_obj(path, out)?;
+        Ok(bin_path)
     }
 
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), HypercError> {
@@ -349,7 +350,7 @@ impl <'ctx>Codegen<'ctx> {
 
             Stmt::Struct { name, fields } => {
                 let st = self.context.opaque_struct_type(&name.lexeme);
-                let mut field_types = vec![];
+                let mut field_types: Vec<BasicTypeEnum> = vec![];
                 let mut str_fields = vec![];
                 for (tok, vt) in fields {
                     let llvm_ty = self.var_to_llvm(vt, tok.clone())?;
@@ -451,7 +452,7 @@ impl <'ctx>Codegen<'ctx> {
                         }
                     }
                     TokenType::Bang => {
-                        Ok(self.builder.build_int_neg(value.into_int_value(), "ngb").unwrap().into())
+                        Ok(self.builder.build_not(value.into_int_value(), "unb").unwrap().into())
                     }
                     _ => unreachable!()
                 }
@@ -585,8 +586,8 @@ impl <'ctx>Codegen<'ctx> {
             Expr::Grouping { expr } => self.compile_expr(expr),
 
             Expr::Variable { name } => {
-                let (ptr, ty, _ ) = self.variables.get(&name.lexeme)
-                 .ok_or_else(|| HypercError::CompileError {
+                let (ptr, ty, _ ) = self.variables
+                 .get(&name.lexeme).ok_or_else(|| HypercError::CompileError {
                     span: expr_span(expr),
                     message: "Variable not found.".to_string()
                 })?;
@@ -598,8 +599,8 @@ impl <'ctx>Codegen<'ctx> {
                  .get(&name.lexeme) {
                     
                     Some((st, items)) => {
-                        let ptr = st.get_undef();
-                        (ptr, items.clone())
+                        let agg = st.get_undef();
+                        (agg, items.clone())
                     }
 
                     None => return Err(HypercError::CompileError {
@@ -627,7 +628,7 @@ impl <'ctx>Codegen<'ctx> {
             }
 
             Expr::Get { object, item } => {
-                let (ptr, vt) = self.compile_lvalue(object)?;
+                let (ptr, vt) = self.compile_lvalue(expr)?;
                 let pointee_ty = self.var_to_llvm(&vt, item.clone())?;
                 Ok(self.builder.build_load(pointee_ty, ptr, &item.lexeme)?)
             }
@@ -680,7 +681,7 @@ impl <'ctx>Codegen<'ctx> {
 
     fn compile_function(&mut self, 
         name: Token, args: &Vec<(Token, VarType)>,
-        statements: &Stmt,return_type: Option<VarType>
+        statements: &Stmt, return_type: Option<VarType>
     ) -> Result<(), HypercError> {
         let og_block = self.builder.get_insert_block();
         let og_variables = self.variables.clone();
@@ -974,10 +975,17 @@ impl <'ctx>Codegen<'ctx> {
                         Ok(struct_type.into())
                     },
 
-                    None => return Err(HypercError::CompileError {
-                        span: tok.start..tok.end,
-                        message: "Type not found.".to_string()
-                    })
+                    None => {
+                        match self.enum_types.contains_key(&tok.lexeme) {
+                            true => Ok(self.context.i64_type().into()),
+                            false => {
+                                return Err(HypercError::CompileError {
+                                    span: tok.start..tok.end,
+                                    message: "Type not found.".to_string()
+                                })
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1054,13 +1062,9 @@ impl <'ctx>Codegen<'ctx> {
                 message: "Wrong expression to compile left value.".to_string()
             })
         }
-
-
-
-
     }
 
-    fn emit_obj(&self, path: &str, out: &str) -> Result<(), HypercError> {
+    fn emit_obj(&self, path: &str, out: &str) -> Result<PathBuf, HypercError> {
         match Target::initialize_native(&InitializationConfig::default()) {
             Ok(_) => {}
             Err(e) => return Err(HypercError::BuildError {
@@ -1097,7 +1101,7 @@ impl <'ctx>Codegen<'ctx> {
          .map_err(|e| HypercError::BuildError {
             message: e.to_string()
         })?;
-        let mut cmd = Command::new("cc");
+        let mut cmd = Command::new("clang");
         cmd.args([
             &obj_path.to_str().unwrap(),
             "-o",
@@ -1106,8 +1110,7 @@ impl <'ctx>Codegen<'ctx> {
         match cmd.status() {
             Ok(status) => {
                 if status.success() {
-                    println!("Compiled to: {}\n", &bin_path.display());
-                    return Ok(());
+                    return Ok(bin_path);
                 } else {
                     return Err(HypercError::BuildError {
                         message: format!(

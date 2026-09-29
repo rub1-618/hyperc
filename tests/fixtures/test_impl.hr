@@ -1,0 +1,42 @@
+struct Type {
+    smth: bool,
+}
+
+struct Point {
+    x: int,
+    y: int,
+    z: int,
+    b: Type
+}
+
+impl Point {
+
+    func get_x() -> int {
+        return self.x;
+    }
+
+    func set_x(a: int) {
+        self.x = a;
+    }
+
+    func add_x(a: int) -> int {
+        return self.x + a;
+    }
+
+    func smth() -> bool {
+        self.b.smth = true;
+        let mut b: bool = self.b.smth;
+        return b;
+    }
+}
+
+func main() -> int {
+    let mut p: Point = Point { x: 1, y: 2, z: 3, b: Type { smth: false } };
+    print(p.smth());
+    print(p.x); // 1
+    p.set_x(5);
+    print(p.x); // 5
+    print(p.add_x(2)); // 7
+
+    return 0;
+}

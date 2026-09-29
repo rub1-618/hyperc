@@ -1,0 +1,23 @@
+struct Type {
+    smth: bool,
+}
+
+struct Point {
+    x: int,
+    y: Type,
+    z: float
+}
+
+func main() -> int {
+    let mut p: Point = Point {
+        x: 5,
+        y: Type { smth: true },
+        z: 2.14
+    };
+    print(p.x);
+    p.y = Type { smth: false };
+    print(p.y.smth);
+    let const k: float = p.z + 1;
+    print(k);
+    return 0;
+}

@@ -1,10 +1,16 @@
 // custom folder
+
 .directory
 
 // ! bins
+
 out
 out.o
 
 // testing + others
+
 /target
 test.hr
+
+/tests/fixtures/*.o
+/tests/fixtures/test_parade

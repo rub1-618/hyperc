@@ -24,8 +24,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Sets up the compiler and installs LLVM.
-    Setup,
 
     /// Runs the file specified. If the file path is empty runs a terminal version.
     Run   {
@@ -51,22 +49,19 @@ enum Commands {
 fn main() {
     let cli  = Cli::parse();
     match cli.command {
-        Commands::Setup => {}
     
         Commands::Run { path, out, debug } => {
             run(&path, &out, debug);
-            std::process::exit(0);
 
         }
 
         Commands::Build { path, out, debug } => {
             build(&path, &out, debug);
-            std::process::exit(0);
         }
     }
 }
 
-fn build (path: &PathBuf, out: &Option<PathBuf>, debug: bool) {
+fn build (path: &PathBuf, out: &Option<PathBuf>, debug: bool) -> PathBuf {
     let src = drivers::get_source(&path);
     let path_str = drivers::get_path_str(&path);
     let out_str = drivers::get_out_str(&out);
@@ -78,10 +73,15 @@ fn build (path: &PathBuf, out: &Option<PathBuf>, debug: bool) {
     // resolver + checker
     drivers::check_stmts(&src, &stmts);
     // codegen
-    drivers::generate_code(&src, &stmts, &path_str, &out_str, debug);
+    let bin_path = drivers::generate_code(
+        &src, &stmts, &path_str, &out_str, debug
+    );
+    
+    println!("Compiled to: {}\n", &bin_path.display());
+    bin_path
 }
 
 fn run (path: &PathBuf, out: &Option<PathBuf>, debug: bool) {
-    build(path, out, debug);
-    drivers::run_bin(out);
+    let bin_path = build(path, out, debug);
+    drivers::run_bin(&bin_path);
 }

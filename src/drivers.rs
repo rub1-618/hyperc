@@ -10,16 +10,12 @@ use crate::checker;
 use crate::codegen;
 use crate::error;
 
-pub fn run_bin(out: &Option<PathBuf>) {
-    let out_str = get_out_str(out);
-    let fpath = format!("./{}", out_str);
-    let mut cmd = Command::new(fpath);
+pub fn run_bin(bin_path: &PathBuf) {
+    let mut cmd = Command::new(bin_path);
     match cmd.status() {
         Ok(_) => {}
         Err(e) => {
-            let err = e.to_string();
-            eprintln!("Unable to get the status of the run command: {}", err);
-            std::process::exit(64)
+            eprintln!("Error ocured on runtime: {}", e)
         }
     }
 }
@@ -101,14 +97,15 @@ pub fn check_stmts(src: &str, stmts: &Vec<ast::Stmt>) {
 }
 
 pub fn generate_code(src: &str, stmts: &Vec<ast::Stmt>, 
- path: &str, out: &str, is_debug: bool) {
+ path: &str, out: &str, is_debug: bool) -> PathBuf {
     let context = inkwell::context::Context::create();
     let mut codegen = codegen::Codegen::new(&context);
-    match codegen.compile(&stmts, path, out, is_debug) {
-        Ok(_) => {}
+    let bin_path = match codegen.compile(&stmts, path, out, is_debug) {
+        Ok(p) => p,
         Err(e) => {
             error::report_error(&src, &e);
             std::process::exit(error::exit_code(&e))
         }
-    }
+    };
+    bin_path
 }
