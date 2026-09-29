@@ -627,7 +627,7 @@ impl <'ctx>Codegen<'ctx> {
                 Ok(agg.into())
             }
 
-            Expr::Get { object, item } => {
+            Expr::Get { item, .. } => {
                 let (ptr, vt) = self.compile_lvalue(expr)?;
                 let pointee_ty = self.var_to_llvm(&vt, item.clone())?;
                 Ok(self.builder.build_load(pointee_ty, ptr, &item.lexeme)?)

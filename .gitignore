@@ -14,3 +14,11 @@ test.hr
 
 /tests/fixtures/*.o
 /tests/fixtures/test_parade
+/tests/fixtures/test_exit_code
+/tests/fixtures/test_if_else
+/tests/fixtures/test_while
+/tests/fixtures/test_for
+/tests/fixtures/test_func
+/tests/fixtures/test_struct
+/tests/fixtures/test_impl
+/tests/fixtures/test_enum
