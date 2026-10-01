@@ -62,8 +62,7 @@ pub fn get_tokens(src: &str) -> Vec<token::Token> {
     let mut lexer = lexer::Lexer::new(src.to_string());
     let tokens = lexer.scan_tokens();
     if !lexer.errors.is_empty() {
-        error::report_all(&src, &lexer.errors);
-        std::process::exit(error::exit_code(&lexer.errors[0]))
+        error::report_compiler_all(&src, &lexer.errors);
     }
     tokens
 }
@@ -72,8 +71,7 @@ pub fn get_stmts(src: &str, tokens: Vec<token::Token>) -> Vec<ast::Stmt> {
     let mut parser = parser::Parser::new(tokens);
     let stmts = parser.parse();
     if !parser.errors.is_empty() {
-        error::report_all(&src, &parser.errors);
-        std::process::exit(error::exit_code(&parser.errors[0]))
+        error::report_compiler_all(&src, &parser.errors);
     }
     stmts
 }
@@ -83,16 +81,14 @@ pub fn check_stmts(src: &str, stmts: &Vec<ast::Stmt>) {
     let mut resolver = resolver::Resolver::new();
     resolver.resolve(&stmts);
     if !resolver.errors.is_empty() {
-        error::report_all(&src, &resolver.errors);
-        std::process::exit(error::exit_code(&resolver.errors[0]))
+        error::report_compiler_all(&src, &resolver.errors);
     }
     
     let types = resolver.get_types();
     let mut checker = checker::TypeChecker::new(types);
     checker.check(&stmts);
     if !checker.errors.is_empty() {
-        error::report_all(&src, &checker.errors);
-        std::process::exit(error::exit_code(&checker.errors[0]))
+        error::report_compiler_all(&src, &checker.errors);
     }
 }
 
@@ -103,8 +99,8 @@ pub fn generate_code(src: &str, stmts: &Vec<ast::Stmt>,
     let bin_path = match codegen.compile(&stmts, path, out, is_debug) {
         Ok(p) => p,
         Err(e) => {
-            error::report_error(&src, &e);
-            std::process::exit(error::exit_code(&e))
+            error::report_compiler_error(&src, &e);
+            std::process::exit(error::exit_code(&e));
         }
     };
     bin_path

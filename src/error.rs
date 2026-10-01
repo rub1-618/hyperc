@@ -9,20 +9,33 @@ pub enum HypercError {
     TypeError       { span: Range<usize>, message: String },
     CompileError    { span: Range<usize>, message: String },
     BuildError      { message: String },
+
+    SetupError      { message: String },
 }
 
-pub fn report_error(source: &str, error: &HypercError) {
+pub fn report_compiler_error(source: &str, error: &HypercError) {
     match &error {
         HypercError::LexerError { span, message }   |
         HypercError::ParseError { span, message }   |
         HypercError::ResolveError { span, message } |
         HypercError::TypeError { span, message }    |
-        HypercError::CompileError { span, message }=> {
+        HypercError::CompileError { span, message } => {
             proceed_error(source, span, message);
         }
         HypercError::BuildError { message, .. } => {
-            panic!("[BuildError] {message}")
+            eprintln!("[BuildError] {message}")
         }
+        _ => panic!("Not a compiler error.")
+    }
+}
+
+pub fn report_setup_error(error: &HypercError) {
+    match &error {
+        HypercError::SetupError { message, .. } =>  {
+            eprintln!("[SetupError] {message}");
+            std::process::exit(exit_code(error));
+        }
+        _ => panic!("Not a setup error.")
     }
 }
 
@@ -40,11 +53,12 @@ fn proceed_error(source: &str, span: &Range<usize>, message: &str) {
         .unwrap()
 }
 
-pub fn report_all(source: &str, errors: &[HypercError]) {
+pub fn report_compiler_all(source: &str, errors: &[HypercError]) {
     if errors.is_empty() { return }
     for error in errors {
-        report_error(source, error);
+        report_compiler_error(source, error);
     }
+    std::process::exit(exit_code(&errors[0]))
 }
 
 pub fn exit_code(error: &HypercError) -> i32 {
@@ -54,6 +68,7 @@ pub fn exit_code(error: &HypercError) -> i32 {
         HypercError::ResolveError   { .. } => 3,
         HypercError::TypeError      { .. } => 4,
         HypercError::CompileError   { .. } => 5,
-        HypercError::BuildError     { .. } => 6
+        HypercError::BuildError     { .. } => 6,
+        HypercError::SetupError     { .. } => 7
     }
 }

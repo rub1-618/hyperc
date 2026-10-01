@@ -11,6 +11,7 @@ mod checker;
 mod codegen;
 mod support;
 mod drivers;
+mod setup;
 
 #[derive(Parser)]
 #[command(version, about, name = "hyperc")]
@@ -24,6 +25,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+
+    /// Sets up the compiler and installs llvm.
+    Setup,
 
     /// Runs the file specified. If the file path is empty runs a terminal version.
     Run   {
@@ -50,6 +54,8 @@ fn main() {
     let cli  = Cli::parse();
     match cli.command {
     
+        Commands::Setup => setup::setup_hyperc(),
+
         Commands::Run { path, out, debug } => {
             run(&path, &out, debug);
 
