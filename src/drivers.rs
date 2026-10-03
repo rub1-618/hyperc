@@ -93,10 +93,10 @@ pub fn check_stmts(src: &str, stmts: &Vec<ast::Stmt>) {
 }
 
 pub fn generate_code(src: &str, stmts: &Vec<ast::Stmt>, 
- path: &str, out: &str, is_debug: bool) -> PathBuf {
+ path: &str, out: &str, show_ir: bool) -> PathBuf {
     let context = inkwell::context::Context::create();
     let mut codegen = codegen::Codegen::new(&context);
-    let bin_path = match codegen.compile(&stmts, path, out, is_debug) {
+    let bin_path = match codegen.compile(&stmts, path, out, show_ir) {
         Ok(p) => p,
         Err(e) => {
             error::report_compiler_error(&src, &e);

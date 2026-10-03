@@ -35,8 +35,15 @@ enum Commands {
         /// lets you select the directory for the binary file.
         #[arg(short, long, value_name = "DIRECTORY")]
         out: Option<PathBuf>,
-        /// displays debug information
-        #[arg(long)] debug: bool
+
+        /// displays lexer tokens
+        #[arg(long)] show_tokens: bool,
+
+        /// displays the checked ast if it has no mistakes
+        #[arg(long)] show_ast: bool,
+
+        /// displays the generated intermediate representation
+        #[arg(long)] show_ir: bool
     },
 
     /// Builds the file specified.
@@ -45,8 +52,15 @@ enum Commands {
         /// lets you select the directory for the binary file.
         #[arg(short, long, value_name = "DIRECTORY")]
         out: Option<PathBuf>,
-        /// displays debug information
-        #[arg(long)] debug: bool
+
+        /// displays lexer tokens
+        #[arg(long)] show_tokens: bool,
+
+        /// displays the checked ast if it has no mistakes
+        #[arg(long)] show_ast: bool,
+
+        /// displays the generated intermediate representation
+        #[arg(long)] show_ir: bool
     },
 }
 
@@ -56,38 +70,51 @@ fn main() {
     
         Commands::Setup => setup::setup_hyperc(),
 
-        Commands::Run { path, out, debug } => {
-            run(&path, &out, debug);
+        Commands::Run { path, out, 
+            show_tokens, show_ast, show_ir } => {
+            run(&path, &out, show_tokens, show_ast, show_ir);
 
         }
 
-        Commands::Build { path, out, debug } => {
-            build(&path, &out, debug);
+        Commands::Build { path, out, 
+            show_tokens, show_ast, show_ir } => {
+            build(&path, &out, show_tokens, show_ast, show_ir);
         }
     }
 }
 
-fn build (path: &PathBuf, out: &Option<PathBuf>, debug: bool) -> PathBuf {
+fn build (path: &PathBuf, out: &Option<PathBuf>, 
+    show_tokens: bool, show_ast: bool, show_ir: bool) -> PathBuf {
+
     let src = drivers::get_source(&path);
     let path_str = drivers::get_path_str(&path);
     let out_str = drivers::get_out_str(&out);
 
-    // lexer
+    // ! lexer
     let tokens = drivers::get_tokens(&src);
-    // parser
+
+    if show_tokens { println!("{:?}", tokens); }
+
+    // ! parser
     let stmts = drivers::get_stmts(&src, tokens);
-    // resolver + checker
+
+    // ! resolver + checker
     drivers::check_stmts(&src, &stmts);
-    // codegen
+
+    if show_ast { println!("{:?}", stmts); }
+
+    // ! codegen
     let bin_path = drivers::generate_code(
-        &src, &stmts, &path_str, &out_str, debug
+        &src, &stmts, &path_str, &out_str, show_ir
     );
     
     println!("Compiled to: {}\n", &bin_path.display());
     bin_path
 }
 
-fn run (path: &PathBuf, out: &Option<PathBuf>, debug: bool) {
-    let bin_path = build(path, out, debug);
+fn run (path: &PathBuf, out: &Option<PathBuf>, 
+    show_tokens: bool, show_ast: bool, show_ir: bool) {
+    
+    let bin_path = build(path, out, show_tokens, show_ast, show_ir);
     drivers::run_bin(&bin_path);
 }

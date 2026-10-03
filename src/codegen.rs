@@ -66,12 +66,12 @@ impl <'ctx>Codegen<'ctx> {
 
     pub fn compile(&mut self, 
         stmts: &[Stmt], path: &str, 
-        out: &str, is_debug: bool
+        out: &str, show_ir: bool
     ) -> Result<PathBuf, HypercError> {
         for stmt in stmts {
             self.compile_stmt(stmt)?;
         }
-        if is_debug {
+        if show_ir {
             println!("{}", self.module.print_to_string().to_string())
         }
         match self.module.verify() {
