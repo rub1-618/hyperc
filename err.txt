@@ -1,0 +1,23 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/hyperc check ./test.hr --color never`
+Error: Expected ';' after assignment.
+    ╭─[ input:20:5 ]
+    │
+ 20 │     }
+    │     ┬  
+    │     ╰── Expected ';' after assignment.
+────╯
+Error: Expected method in impl.
+    ╭─[ input:42:2 ]
+    │
+ 42 │ }
+    │  │ 
+    │  ╰─ Expected method in impl.
+────╯
+Error: Expected '}' in impl statement.
+    ╭─[ input:42:2 ]
+    │
+ 42 │ }
+    │  │ 
+    │  ╰─ Expected '}' in impl statement.
+────╯

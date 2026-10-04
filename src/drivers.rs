@@ -58,49 +58,63 @@ pub fn get_source(path: &PathBuf) -> String {
     }
 }
 
-pub fn get_tokens(src: &str) -> Vec<token::Token> {
+pub fn get_tokens(src: &str, is_color: bool) -> Vec<token::Token> {
     let mut lexer = lexer::Lexer::new(src.to_string());
     let tokens = lexer.scan_tokens();
     if !lexer.errors.is_empty() {
-        error::report_compiler_all(&src, &lexer.errors);
+        error::report_compiler_all(&src, &lexer.errors, is_color);
     }
     tokens
 }
 
-pub fn get_stmts(src: &str, tokens: Vec<token::Token>) -> Vec<ast::Stmt> {
+pub fn get_stmts(src: &str, tokens: Vec<token::Token>, is_color: bool) -> Vec<ast::Stmt> {
     let mut parser = parser::Parser::new(tokens);
     let stmts = parser.parse();
     if !parser.errors.is_empty() {
-        error::report_compiler_all(&src, &parser.errors);
+        error::report_compiler_all(&src, &parser.errors, is_color);
     }
     stmts
 }
 
-pub fn check_stmts(src: &str, stmts: &Vec<ast::Stmt>) {
+pub fn check_stmts(src: &str, stmts: &Vec<ast::Stmt>, is_color: bool) {
 
     let mut resolver = resolver::Resolver::new();
     resolver.resolve(&stmts);
     if !resolver.errors.is_empty() {
-        error::report_compiler_all(&src, &resolver.errors);
+        error::report_compiler_all(&src, &resolver.errors, is_color);
     }
     
     let types = resolver.get_types();
     let mut checker = checker::TypeChecker::new(types);
     checker.check(&stmts);
     if !checker.errors.is_empty() {
-        error::report_compiler_all(&src, &checker.errors);
+        error::report_compiler_all(&src, &checker.errors, is_color);
     }
 }
 
-pub fn generate_code(src: &str, stmts: &Vec<ast::Stmt>, 
- path: &str, out: &str, show_ir: bool) -> PathBuf {
+pub fn generate_code(
+    src: &str, stmts: &Vec<ast::Stmt>, 
+    path: &str, out: &str, show_ir: bool, is_color: bool
+) -> PathBuf {
+
     let context = inkwell::context::Context::create();
     let mut codegen = codegen::Codegen::new(&context);
     let bin_path = match codegen.compile(&stmts, path, out, show_ir) {
         Ok(p) => p,
         Err(e) => {
-            error::report_compiler_error(&src, &e);
-            std::process::exit(error::exit_code(&e));
+            match e {
+                error::HypercError::CompileError { .. } => {
+                    error::report_build_error(&e);
+                    std::process::exit(error::exit_code(&e));
+                }
+
+                error::HypercError::BuildError { .. } => {
+                    error::report_compiler_error(src, &e, is_color);
+                    std::process::exit(error::exit_code(&e));
+                }
+
+                _ => panic!("Not a Compile/Build Error.")
+            }
         }
     };
     bin_path
