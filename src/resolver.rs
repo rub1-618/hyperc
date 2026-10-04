@@ -1146,7 +1146,7 @@ mod tests {
     #[test]
     fn test_resolver_for_stmt_err() {
         let result = resolve_source("
-            while (let mut i: int; i < 3; i = i + 1) {
+            for (let mut i: int = 0; i < 3; x = i + 1) {
                 print(i);
             }
         ");
@@ -1154,7 +1154,7 @@ mod tests {
             Err(e) => {
                 match &e[0] {
                     HypercError::ResolveError { message, .. } => {
-                        assert_eq!(message, "Variable or method not found.")
+                        assert_eq!(message, "Variable not found.")
                     }
                     _ => panic!("Expected ResolveError.")
                 }

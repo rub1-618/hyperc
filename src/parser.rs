@@ -612,7 +612,7 @@ impl Parser {
                 span: self.peek().start..self.peek().end, 
                 message: message.to_string()
             });
-            self.advance();
+            self.synchronize();
             let err_tok = Token { 
                 token_type: TokenType::Error, 
                 lexeme: "".to_string(), 
@@ -620,6 +620,18 @@ impl Parser {
                 end: self.peek().end
             };
             return err_tok;
+        }
+    }
+
+    fn synchronize(&mut self) {
+        while !self.is_at_end() {
+            match self.peek().token_type {
+                TokenType::Semicolon | TokenType::RightBrace => {
+                    self.advance(); 
+                    break;
+                }
+                _ => {self.advance();}
+            }
         }
     }
 
@@ -655,7 +667,7 @@ impl Parser {
                 });
                 0
             }
-        }       
+        }
     }
 
     fn parse_float(&mut self) -> f64 {
@@ -668,7 +680,7 @@ impl Parser {
                 });
                 0.0
             }
-        }       
+        }
     }
 }
 

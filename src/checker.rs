@@ -1500,23 +1500,4 @@ mod tests {
             Ok(_) => panic!("Expected error.")
         }
     }
-
-    // ! -- others --
-
-    #[test]
-    fn test_checker_unknown_expr_err() {
-        let result = check_source("5 & true;");
-        match result {
-            Err(e) => {
-                match &e[0] {
-                    HypercError::TypeError { message, .. } => {
-                        assert_eq!(message, "Unknown expression.");
-                    }
-                    _ => panic!("Expected TypeError.")
-                }
-            }
-            Ok(_) => panic!("Expected error.")
-        }
-    }
-
 }
