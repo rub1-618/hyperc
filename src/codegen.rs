@@ -50,6 +50,13 @@ pub struct Codegen<'ctx> {
     enum_types: HashMap<String, Vec<String>>
 } 
 
+#[derive(Debug, Clone, PartialEq, clap::ValueEnum)]
+pub enum Emit {
+    Obj,
+    Asm,
+    Ll
+}
+
 impl <'ctx>Codegen<'ctx> {
     pub fn new(context: &'ctx Context) -> Self {
         let module = context.create_module("module");
@@ -66,11 +73,20 @@ impl <'ctx>Codegen<'ctx> {
 
     pub fn compile(&mut self, 
         stmts: &[Stmt], path: &str, 
-        out: &str, show_ir: bool
+        out: &str, show_ir: bool,
+        emit: Emit
     ) -> Result<PathBuf, HypercError> {
+
+        self.initialize_native()?;
+        let target_machine = self.get_target_machine()?;
+
+        self.module.set_triple(&target_machine.get_triple());
+        self.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+
         for stmt in stmts {
             self.compile_stmt(stmt)?;
         }
+
         if show_ir {
             println!("{}", self.module.print_to_string().to_string())
         }
@@ -83,7 +99,7 @@ impl <'ctx>Codegen<'ctx> {
                 })
             }
         }
-        let bin_path = self.emit_obj(path, out)?;
+        let bin_path = self.emit(target_machine, path, out, emit)?;
         Ok(bin_path)
     }
 
@@ -459,7 +475,6 @@ impl <'ctx>Codegen<'ctx> {
             }
 
             Expr::Call { callee, arguments } => {
-
 
                 if let Expr::Variable { name } = &**callee {
                     let function = self.module
@@ -1064,13 +1079,75 @@ impl <'ctx>Codegen<'ctx> {
         }
     }
 
-    fn emit_obj(&self, path: &str, out: &str) -> Result<PathBuf, HypercError> {
-        match Target::initialize_native(&InitializationConfig::default()) {
-            Ok(_) => {}
+    fn emit(&self, target_machine: TargetMachine, path: &str, out: &str, emit_to: Emit) -> Result<PathBuf, HypercError> {
+
+        let out_path = Path::new(path).parent().unwrap_or(Path::new("."));
+
+        if emit_to == Emit::Ll {
+            let emit_path = out_path.join(format!("{}.ll", out));
+
+            match self.module.print_to_file(&emit_path) {
+                Ok(_) => {
+                    println!("Emitted to: {}", emit_path.to_str().unwrap().to_string());
+                    return Ok(emit_path); // no other choice because we are not running it
+                }
+                Err(e) => return Err(HypercError::BuildError {
+                    message: format!("Error ocured while printing the module to a file: {}", e)
+                })
+            }
+        }
+
+        let (emit_path, bin_path, file_type) = match emit_to {
+            Emit::Obj => {
+                let emit_path = out_path.join(format!("{}.o", out));
+                let bin_path = out_path.join(out);
+                let file_type = FileType::Object;
+                (emit_path, bin_path, file_type)
+            }
+
+            Emit::Asm => {
+                let emit_path = out_path.join(format!("{}.s", out));
+                let bin_path = out_path.join(out);
+                let file_type = FileType::Assembly;
+                (emit_path, bin_path, file_type)
+            }
+
+            Emit::Ll => unreachable!()
+        };
+        
+        target_machine.write_to_file(&self.module, file_type, &emit_path)
+        .map_err(|e| HypercError::BuildError {
+            message: e.to_string()
+        })?;
+        let mut cmd = Command::new("clang");
+        cmd.args([
+            emit_path.to_str().unwrap(),
+            "-o",
+            &bin_path.to_str().unwrap()
+        ]);
+        match cmd.status() {
+            Ok(status) => {
+                if status.success() {
+                    println!("Emitted to: {}", emit_path.to_str().unwrap().to_string());
+                    return Ok(bin_path);
+                } else {
+                    return Err(HypercError::BuildError {
+                        message: format!(
+                            "Autolinking failed with exit code: {:?}", 
+                            status.code()
+                        )
+                    })
+                }
+            }
             Err(e) => return Err(HypercError::BuildError {
-                message: e.to_string()
+                message: format!("Autolinking failed with code: {:?} on {}.", 
+                    e, &emit_path.display()
+                )
             })
         }
+    }
+
+    fn get_target_machine(&self) -> Result<TargetMachine, HypercError> {
         let triple = TargetMachine::get_default_triple();
         let target = match Target::from_triple(&triple) {
             Ok(t) => t,
@@ -1090,40 +1167,14 @@ impl <'ctx>Codegen<'ctx> {
         ).ok_or_else(|| HypercError::BuildError {
             message: "TargetMachine creation failed.".to_string()
         })?;
-        let out_path = Path::new(path).parent().unwrap_or(Path::new("."));
-        let obj_path = out_path.join(format!("{}.o", out));
-        let bin_path = out_path.join(out);
-        let file_type = FileType::Object;
+        Ok(target_machine)
+    }
 
-        // todo: assembly: .s
-
-        target_machine.write_to_file(&self.module, file_type, &obj_path)
-         .map_err(|e| HypercError::BuildError {
-            message: e.to_string()
-        })?;
-        let mut cmd = Command::new("clang");
-        cmd.args([
-            &obj_path.to_str().unwrap(),
-            "-o",
-            &bin_path.to_str().unwrap()
-        ]);
-        match cmd.status() {
-            Ok(status) => {
-                if status.success() {
-                    return Ok(bin_path);
-                } else {
-                    return Err(HypercError::BuildError {
-                        message: format!(
-                            "Autolinking failed with exit code: {:?}", 
-                            status.code()
-                        )
-                    })
-                }
-            }
-            Err(e) => return Err(HypercError::BuildError {
-                message: format!("Autolinking failed with code: {:?} on {}.", 
-                    e, &obj_path.display()
-                )
+    fn initialize_native(&self) -> Result<(), HypercError> {
+        match Target::initialize_native(&InitializationConfig::default()) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(HypercError::BuildError {
+                message: e.to_string()
             })
         }
     }

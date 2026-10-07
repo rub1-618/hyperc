@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf, process::Command};
 use inkwell;
 
+use crate::codegen::Emit;
 use crate::token;
 use crate::ast;
 use crate::lexer;
@@ -94,12 +95,13 @@ pub fn check_stmts(src: &str, stmts: &Vec<ast::Stmt>, is_color: bool) {
 
 pub fn generate_code(
     src: &str, stmts: &Vec<ast::Stmt>, 
-    path: &str, out: &str, show_ir: bool, is_color: bool
+    path: &str, out: &str, show_ir: bool, 
+    is_color: bool, emit: Emit
 ) -> PathBuf {
 
     let context = inkwell::context::Context::create();
     let mut codegen = codegen::Codegen::new(&context);
-    let bin_path = match codegen.compile(&stmts, path, out, show_ir) {
+    let bin_path = match codegen.compile(&stmts, path, out, show_ir, emit) {
         Ok(p) => p,
         Err(e) => {
             match e {

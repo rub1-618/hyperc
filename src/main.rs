@@ -1,4 +1,4 @@
-use crate::error::{ColorMode};
+use crate::{error::ColorMode, codegen::Emit};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -13,6 +13,8 @@ mod codegen;
 mod support;
 mod drivers;
 mod setup;
+
+const RUN_EMIT: Emit = Emit::Obj;
 
 #[derive(Parser)]
 #[command(version, about, name = "hyperc")]
@@ -67,7 +69,10 @@ enum Commands {
         #[arg(long)] show_ir: bool,
 
         /// sets the color stderr mode ( auto / always / never ).
-        #[arg(long, value_enum, default_value_t = ColorMode::Auto)] color: ColorMode
+        #[arg(long, value_enum, default_value_t = ColorMode::Auto)] color: ColorMode,
+
+        /// lets you generate a linked file ( obj / asm ).
+        #[arg(long, value_enum, default_value_t = Emit::Obj)] emit: Emit
     },
 
     /// checks the file specified.
@@ -96,27 +101,32 @@ fn main() {
             show_tokens, show_ast, show_ir, color } => {
             
             run(&path, &out, show_tokens, show_ast, show_ir, color);
-
         }
 
-        Commands::Build { path, out, 
-            show_tokens, show_ast, show_ir, color } => {
+        Commands::Build {
+            path, out, 
+            show_tokens, show_ast,
+            show_ir, color,
+            emit } => {
             
-            let bin_path = build(&path, &out, show_tokens, show_ast, show_ir, color);
-            eprintln!("Compiled to: {}\n", &bin_path.display());
+            let bin_path = build(&path, &out, show_tokens, show_ast, show_ir, color, emit.clone());
+            if emit != Emit::Ll {
+                eprintln!("Compiled to: {}\n", &bin_path.display());
+            }
         }
 
         Commands::Check { path, 
             show_tokens, show_ast, color } => {
             let is_color = error::is_color(color);
             check(&path, show_tokens, show_ast, is_color);
+            println!("ok")
         }
     }
 }
 
 fn build (path: &PathBuf, out: &Option<PathBuf>, 
     show_tokens: bool, show_ast: bool, show_ir: bool,
-    colormode: error::ColorMode
+    colormode: ColorMode, emit: Emit
 ) -> PathBuf {
 
     let path_str = drivers::get_path_str(&path);
@@ -127,7 +137,7 @@ fn build (path: &PathBuf, out: &Option<PathBuf>,
 
     // ! codegen
     let bin_path = drivers::generate_code(
-        &src, &stmts, &path_str, &out_str, show_ir, is_color
+        &src, &stmts, &path_str, &out_str, show_ir, is_color, emit
     );
 
     bin_path
@@ -136,13 +146,12 @@ fn build (path: &PathBuf, out: &Option<PathBuf>,
 fn run (
     path: &PathBuf, out: &Option<PathBuf>, 
     show_tokens: bool, show_ast: bool, 
-    show_ir: bool, colormode: error::ColorMode
+    show_ir: bool, colormode: ColorMode
 ) {
     
-    let bin_path = build(path, out, show_tokens, show_ast, show_ir, colormode);
+    let bin_path = build(path, out, show_tokens, show_ast, show_ir, colormode, RUN_EMIT);
+    // Emit::Obj because it's the only option for run
     drivers::run_bin(&bin_path);
-
-    println!("ok")
 }
 
 fn check(path: &PathBuf, show_tokens: bool, show_ast: bool, is_color: bool
