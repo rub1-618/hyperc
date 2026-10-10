@@ -4,7 +4,7 @@ use crate::error::{self, HypercError};
 pub fn setup_hyperc() {
     match setup::proceed() {
         Ok(_) => println!("Installation finished!"),
-        Err(e) => error::report_setup_error(&e),
+        Err(e) => error::report_single_error(&e),
     }
 }
 

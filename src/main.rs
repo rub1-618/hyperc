@@ -1,4 +1,6 @@
-use crate::{error::ColorMode, codegen::Emit};
+use crate::{
+    codegen::Emit, drivers::{StageKind, log_stage}, error::{ColorMode, exit_code, report_single_error}
+};
 use clap::{Parser, Subcommand};
 use std::{path::PathBuf, time::Instant};
 
@@ -102,30 +104,16 @@ fn main() {
     
         Commands::Setup => setup::setup_hyperc(),
 
-        Commands::Run { path, out, 
-            show_tokens, show_ast, show_ir, color, verbose } => {
-            match verbose {
-                true => {
-                    let before = Instant::now();
-                    run(
-                        &path, &out, 
-                        show_tokens, show_ast, 
-                        show_ir, 
-                        color, verbose
-                    );
-                    let ms = format!("{:.2?}", before.elapsed());
-                    eprintln!("Finished in {}.", ms);
-                }
-
-                false => {
-                    run(
-                        &path, &out, 
-                        show_tokens, show_ast, 
-                        show_ir, 
-                        color, verbose
-                    );
-                }
-            }
+        Commands::Run { 
+            path, out, 
+            show_tokens, show_ast, 
+            show_ir, color, 
+            verbose 
+        } => {
+            let before = Instant::now();
+            let code = run(&path, &out, show_tokens, show_ast, show_ir, color, verbose);
+            log_stage(StageKind::All, before, verbose);
+            std::process::exit(code);
         }
 
         Commands::Build {
@@ -134,36 +122,20 @@ fn main() {
             show_ir, color,
             emit, verbose
         } => {
-            match verbose {
-                true => {
-                    let before = Instant::now();
-                    let bin_path = build(
-                        &path, &out, 
-                        show_tokens, show_ast, 
-                        show_ir, 
-                        color, emit.clone(),
-                        verbose
-                    );
-                    let ms = format!("{:.2?}", before.elapsed());
-                    eprintln!("Finished all in {}.", ms);
-                    if emit != Emit::Ll {
-                        eprintln!("Compiled to: {}\n", &bin_path.display());
-                    }
-                }
+            let before = Instant::now();
+            let bin_path = build(
+                &path, &out, 
+                show_tokens, show_ast, 
+                show_ir, 
+                color, emit.clone(),
+                verbose
+            );
+            log_stage(StageKind::Compiling, before, verbose);
 
-                false => {
-                    let bin_path = build(
-                        &path, &out, 
-                        show_tokens, show_ast, 
-                        show_ir, 
-                        color, emit.clone(),
-                        verbose
-                    );
-                    if emit != Emit::Ll {
-                        eprintln!("Compiled to: {}\n", &bin_path.display());
-                    }
-                }
+            if emit != Emit::Ll {
+                eprintln!("Compiled to: {}\n", &bin_path.display());
             }
+                
         }
 
         Commands::Check { 
@@ -171,22 +143,11 @@ fn main() {
             show_ast, color, 
             verbose
         } => {
-            match verbose {
-                true =>{
-                    let before = Instant::now();
-                    let is_color = error::is_color(color);
-                    check(&path, show_tokens, show_ast, is_color, verbose);
-                    let ms = format!("{:.2?}", before.elapsed());
-                    eprintln!("Finished in {}.", ms);
-                    println!("ok");
-                }
-
-                false => {
-                    let is_color = error::is_color(color);
-                    check(&path, show_tokens, show_ast, is_color, verbose);
-                    println!("ok");
-                }
-            }
+            let before = Instant::now();
+            let is_color = error::is_color(color);
+            check(&path, show_tokens, show_ast, is_color, verbose);
+            log_stage(StageKind::All, before, verbose);
+            eprintln!("ok");
         }
     }
 }
@@ -196,32 +157,24 @@ fn build (path: &PathBuf, out: &Option<PathBuf>,
     colormode: ColorMode, emit: Emit, verbose: bool
 ) -> PathBuf {
 
-    let path_str = drivers::get_path_str(&path);
+    let path_str = match drivers::get_path_str(&path) {
+        Ok(p) => p,
+        Err(e) => {
+            error::report_single_error(&e); // single FileError only
+            std::process::exit(exit_code(&e))
+        }
+    };
     let out_str = drivers::get_out_str(&out);
     let  is_color = error::is_color(colormode);
     
     let (stmts, src) = check(&path, show_tokens, show_ast, is_color, verbose);
 
     // ! codegen
-    let bin_path = match verbose {
-        true => {
-            eprintln!("Generating code ...");
-            let before = Instant::now();
-            let bin_path = drivers::generate_code(
-                &src, &stmts, &path_str, &out_str, show_ir, is_color, emit
-            );
-            let ms = format!("{:.2?}", before.elapsed());
-            eprintln!("Generating code finished in {ms}.");
-            bin_path
-        }
-
-        false => {
-            let bin_path = drivers::generate_code(
-                &src, &stmts, &path_str, &out_str, show_ir, is_color, emit
-            );
-            bin_path
-        }
-    };
+    let before = Instant::now();
+    let bin_path = drivers::generate_code(
+        &src, &stmts, &path_str, &out_str, show_ir, is_color, emit
+    );
+    log_stage(StageKind::Codegen, before, verbose);
 
     bin_path
 }
@@ -231,92 +184,71 @@ fn run (
     show_tokens: bool, show_ast: bool, 
     show_ir: bool, colormode: ColorMode, 
     verbose: bool
-) {
-    
-    match verbose {
-        true => {
-            let before = Instant::now();
-            let bin_path = build(
-                path, out, 
-                show_tokens, show_ast, 
-                show_ir, colormode, 
-                RUN_EMIT, verbose
-            );
-            let ms = format!("{:.2?}", before.elapsed());
-            eprintln!("Compilation process finished in {ms}.");
+) -> i32 {
+    let before = Instant::now();
+    let bin_path = build(
+        path, out, 
+        show_tokens, show_ast, 
+        show_ir, colormode, 
+        RUN_EMIT, verbose
+    );
+    log_stage(StageKind::Compiling, before, verbose);
 
-
-            // Emit::Obj because it's the only option for run
-            let before = Instant::now();
-            drivers::run_bin(&bin_path);
-            let ms = format!("{:.2?}", before.elapsed());
-            eprintln!("Run finished in {ms}.");
+    // Emit::Obj because it's the only option for run
+    let before = Instant::now();
+    let code = drivers::run_bin(&bin_path);
+    match code {
+        Ok(opt) => {
+            match opt {
+                Some(c) => {
+                    log_stage(StageKind::Run, before, verbose);
+                    c
+                }
+                None => {
+                    let error = error::HypercError::RunTimeError {
+                        message: "Unable to determine the exit code.".to_string()
+                    };
+                    error::report_single_error(&error);
+                    error::exit_code(&error)
+                }
+            }
         }
-
-        false => {
-            let bin_path = build(
-                path, out, 
-                show_tokens, show_ast, 
-                show_ir, colormode, 
-                RUN_EMIT, verbose
-            );
-
-            // Emit::Obj because it's the only option for run
-            drivers::run_bin(&bin_path);
+        Err(error) => {
+            error::report_single_error(&error); 
+            error::exit_code(&error)
         }
     }
 }
 
 fn check(path: &PathBuf, show_tokens: bool, show_ast: bool, is_color: bool, verbose: bool
 ) -> (Vec<ast::Stmt>, String) {
-    let src = drivers::get_source(&path);
+    let src = match drivers::get_source(&path) {
+        Ok(s) => s,
+        Err(e) => {
+            report_single_error(&e); // FileError
+            std::process::exit(exit_code(&e));
+        }
+    };
 
-    match verbose {
-        true => {
+    // ! lexer
+    let before = Instant::now();
+    let tokens = drivers::get_tokens(&src,  is_color);
+    log_stage(StageKind::Lexer, before, verbose);
 
-            // ! lexer
-            let before = Instant::now();
-            let tokens = drivers::get_tokens(&src,  is_color);
-            let ms = format!("{:.2?}", before.elapsed());
-            eprintln!("Scanning tokens finished in {ms}.");
+    if show_tokens { println!("{:?}", tokens); }
 
-            if show_tokens { println!("{:?}", tokens); }
+    // ! parser
+    let before = Instant::now();
+    let stmts = drivers::get_stmts(&src, tokens, is_color);
+    log_stage(StageKind::Parser, before, verbose);
 
-            // ! parser
-            let before = Instant::now();
-            let stmts = drivers::get_stmts(&src, tokens, is_color);
-            let ms = format!("{:.2?}", before.elapsed());
-            eprintln!("Building AST finished in {ms}.");
+    // ! resolver + checker
+    let before = Instant::now();
+    drivers::check_stmts(&src, &stmts, is_color);
+    log_stage(StageKind::Checking, before, verbose);
 
-            // ! resolver + checker
-            let before = Instant::now();
-            drivers::check_stmts(&src, &stmts, is_color);
-            let ms = format!("{:.2?}", before.elapsed());
-            eprintln!("Checking AST finished in {ms}.");
+    if show_ast { println!("{:?}", stmts); }
 
-            if show_ast { println!("{:?}", stmts); }
-
-            (stmts, src)
+    (stmts, src)
             
-        }
-
-        false => {
-
-            // ! lexer
-            let tokens = drivers::get_tokens(&src,  is_color);
-
-            if show_tokens { println!("{:?}", tokens); }
-
-            // ! parser
-            let stmts = drivers::get_stmts(&src, tokens, is_color);
-
-            // ! resolver + checker
-            drivers::check_stmts(&src, &stmts, is_color);
-
-            if show_ast { println!("{:?}", stmts); }
-
-            (stmts, src)
-        }
-
-    }
 }

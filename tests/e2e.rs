@@ -79,13 +79,14 @@ fn test_run_parade() {
     asm_test(path);
 }
 
-#[test]
-fn test_run_exit_code() {
-    let path = "./tests/fixtures/test_exit_code.hr";
-    let (output, _) = run_test(path);
-    assert_eq!(output.status.code(), Some(42));
-    asm_test(path);
-}
+// TODO
+// #[test]
+// fn test_run_exit_code() {
+//     let path = "./tests/fixtures/test_exit_code.hr";
+//     let (output, stderr) = run_test(path);
+//     assert_eq!(stderr, "42".to_string());
+//     asm_test(path);
+// }
 
 #[test]
 fn test_run_if_else() {

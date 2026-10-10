@@ -9,6 +9,8 @@ pub enum HypercError {
     TypeError       { span: Range<usize>, message: String },
     CompileError    { span: Range<usize>, message: String },
     BuildError      { message: String },
+    RunTimeError    { message: String },
+    FileError       { message: String },
 
     SetupError      { message: String },
 }
@@ -26,21 +28,21 @@ pub fn report_compiler_error(source: &str, error: &HypercError, color: bool) {
     }
 }
 
-pub fn report_build_error(error: &HypercError) {
+pub fn report_single_error(error: &HypercError) {
     match &error {
         HypercError::BuildError { message } =>  {
             eprintln!("[BuildError] {message}");
             std::process::exit(exit_code(error));
         }
-        _ => panic!("Not a setup error.")
-    }
-}
-
-pub fn report_setup_error(error: &HypercError) {
-    match &error {
         HypercError::SetupError { message } =>  {
             eprintln!("[SetupError] {message}");
             std::process::exit(exit_code(error));
+        }
+        HypercError::RunTimeError { message } =>  {
+            eprintln!("[RunTimeError] {message}");
+        }
+        HypercError::FileError { message } =>  {
+            eprintln!("[FileError] {message}");
         }
         _ => panic!("Not a setup error.")
     }
@@ -111,12 +113,14 @@ pub fn report_compiler_all(source: &str, errors: &[HypercError], color: bool) {
 
 pub fn exit_code(error: &HypercError) -> i32 {
     match error {
-        HypercError::LexerError     { .. } => 1,
-        HypercError::ParseError     { .. } => 2,
-        HypercError::ResolveError   { .. } => 3,
-        HypercError::TypeError      { .. } => 4,
-        HypercError::CompileError   { .. } => 5,
-        HypercError::BuildError     { .. } => 6,
-        HypercError::SetupError     { .. } => 7
+        HypercError::LexerError     { .. } => 16,
+        HypercError::ParseError     { .. } => 17,
+        HypercError::ResolveError   { .. } => 18,
+        HypercError::TypeError      { .. } => 19,
+        HypercError::CompileError   { .. } => 20,
+        HypercError::BuildError     { .. } => 21,
+        HypercError::RunTimeError   { .. } => 22,
+        HypercError::FileError      { .. } => 23,
+        HypercError::SetupError     { .. } => 24
     }
 }

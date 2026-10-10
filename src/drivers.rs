@@ -1,7 +1,8 @@
-use std::{fs, path::PathBuf, process::Command};
+use std::{fs, path::PathBuf, process::Command, time::Instant};
 use inkwell;
 
 use crate::codegen::Emit;
+use crate::error::HypercError;
 use crate::token;
 use crate::ast;
 use crate::lexer;
@@ -11,13 +12,24 @@ use crate::checker;
 use crate::codegen;
 use crate::error;
 
-pub fn run_bin(bin_path: &PathBuf) {
+pub enum StageKind {
+    Lexer,
+    Parser,
+    Checking,
+    Codegen,
+    
+    Compiling,
+    Run,
+    All
+}
+
+pub fn run_bin(bin_path: &PathBuf) -> Result<Option<i32>, HypercError> {
     let mut cmd = Command::new(bin_path);
     match cmd.status() {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("Error ocured on runtime: {}", e)
-        }
+        Ok(status) => Ok(status.code()),
+        Err(e) => Err(HypercError::RunTimeError {
+            message: format!("Error ocured on runtime: {}", e)
+        })
     }
 }
 
@@ -28,33 +40,58 @@ pub fn get_out_str(out: &Option<PathBuf>) -> String {
     }
 }
 
-pub fn get_path_str(path: &PathBuf) -> String {
-    if !path.exists() {
-        panic!("File not found.")
+pub fn log_stage(stage: StageKind, before: Instant, verbose: bool) {
+    if verbose {
+        let stage = match stage {
+            StageKind::Lexer        => "token scanning",
+            StageKind::Parser       => "AST building",
+            StageKind::Checking     => "AST checking",
+            StageKind::Codegen      => "code generation",
+            StageKind::Compiling    => "compiling process",
+            StageKind::Run          => "running process",
+            StageKind::All          => "all"
+        };
+        let time = before.elapsed();
+        let res = format!("Finished {stage} in: {time:.2?}.");
+        eprintln!("{}", res);
     }
-    check_extension(path);
-    path.to_str().unwrap().to_string()
 }
 
-fn check_extension(path: &PathBuf) {
+pub fn get_path_str(path: &PathBuf) -> Result<String, HypercError> {
+    if !path.exists() {
+        return Err(HypercError::FileError {
+            message: format!("File '{:?}' not found.", path.display())
+        });
+    }
+    check_extension(path)?; // FileErrors only (so that it can be 'report_single_error')
+    Ok(path.to_str().unwrap().to_string())
+}
+
+fn check_extension(path: &PathBuf) -> Result<(), HypercError> {
     let ext = "hr".to_string();
     match path.extension() {
         Some(extension) => {
             if extension.to_str().unwrap().to_string() != ext {
-                panic!("Not a '.hr' file.")
-            }
+                Err(HypercError::FileError {
+                    message: "Not a '.hr' file.".to_string()
+                })
+            } else { Ok(()) }
         }
         None => {
-            panic!("This file has no extension.")
+            Err(HypercError::FileError {
+                message: "This file has no extension.".to_string()
+            })
         }
     }
 }
 
-pub fn get_source(path: &PathBuf) -> String {
+pub fn get_source(path: &PathBuf) -> Result<String, HypercError> {
     match fs::read_to_string(path) {
-        Ok(s) => s,
+        Ok(s) => Ok(s),
         Err(e) => {
-            panic!("Unable to read the file: {e}")
+            Err(HypercError::FileError {
+                message: format!("Unable to read the file: {e}")
+            })
         }
     }
 }
@@ -106,16 +143,17 @@ pub fn generate_code(
         Err(e) => {
             match e {
                 error::HypercError::CompileError { .. } => {
-                    error::report_build_error(&e);
-                    std::process::exit(error::exit_code(&e));
-                }
-
-                error::HypercError::BuildError { .. } => {
                     error::report_compiler_error(src, &e, is_color);
                     std::process::exit(error::exit_code(&e));
                 }
 
-                _ => panic!("Not a Compile/Build Error.")
+                error::HypercError::BuildError { .. } => {
+                    error::report_single_error(&e);
+                    std::process::exit(error::exit_code(&e));
+                }
+
+                _ => unreachable!() // bcs only Compile- and
+                // Build- Errors are handled in codegen.rs
             }
         }
     };

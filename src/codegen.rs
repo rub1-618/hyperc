@@ -1088,7 +1088,7 @@ impl <'ctx>Codegen<'ctx> {
 
             match self.module.print_to_file(&emit_path) {
                 Ok(_) => {
-                    println!("Emitted to: {}", emit_path.to_str().unwrap().to_string());
+                    eprintln!("Emitted to: {}", emit_path.to_str().unwrap().to_string());
                     return Ok(emit_path); // no other choice because we are not running it
                 }
                 Err(e) => return Err(HypercError::BuildError {
@@ -1128,7 +1128,7 @@ impl <'ctx>Codegen<'ctx> {
         match cmd.status() {
             Ok(status) => {
                 if status.success() {
-                    println!("Emitted to: {}", emit_path.to_str().unwrap().to_string());
+                    eprintln!("Emitted to: {}", emit_path.to_str().unwrap().to_string());
                     return Ok(bin_path);
                 } else {
                     return Err(HypercError::BuildError {
