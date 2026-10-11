@@ -28,8 +28,10 @@ jobs:
 
                 sudo apt-get install -y llvm-22-dev libpolly-22-dev clang-22
             
-            - name: Check LLVM
-              run: ls /usr/lib | grep llvm
+            - name: Check LLVM and clang
+              run: |
+                ls /usr/lib | grep llvm
+                clang --version
 
             - name: Tests
               run: cargo test --release
