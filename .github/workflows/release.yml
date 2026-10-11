@@ -21,12 +21,12 @@ jobs:
             
             - name: Install LLVM
               run: |
-                apt-get update
+                sudo apt-get update
                 wget https://apt.llvm.org/llvm.sh
                 chmod +x ./llvm.sh
                 sudo ./llvm.sh 22
 
-                sudo apt-get install llvm-22-dev libpolly-22-dev clang-22
+                sudo apt-get install -y llvm-22-dev libpolly-22-dev clang-22
             
             - name: Check LLVM
               run: ls /usr/lib | grep llvm
