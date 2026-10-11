@@ -32,7 +32,7 @@ use inkwell::{
 };
 
 const CLANG: &str       = "clang";
-const CLANG_VER: &str   = "clang-99";
+const CLANG_VER: &str   = "clang-22";
 
 impl From<BuilderError> for HypercError {
     fn from(value: BuilderError) -> Self {
