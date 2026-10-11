@@ -1,10 +1,12 @@
-name: "Release on tag workflow."
+name: "CI"
 
-# permissions: write
+permissions: 
+  contents: write
 
 on: 
     push:
       branches: [main]
+      tags: ['v*.*.*']
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,8 +15,6 @@ jobs:
     build:
 
         runs-on: ubuntu-latest
-        # env:
-        #   LLVM_SYS_221_PREFIX: /usr/lib/llvm22-1
 
         steps:
             - uses: actions/checkout@v4
@@ -32,6 +32,7 @@ jobs:
               run: |
                 ls /usr/lib | grep llvm
                 clang --version
+                clang-22 --version
 
             - name: Tests
               run: cargo test --release
@@ -39,7 +40,10 @@ jobs:
             - name: Build
               run: cargo build --release
 
-            # - name: Release
-            #   run: gh release create ${{ github.ref_name }} target/release/hyperc
-            #   env:
-            #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Release
+              if: startsWith(github.ref, 'refs/tags/v')
+              run: |
+                tar czf hyperc-linux-x86_64.tar.gz -C target/release hyperc
+                gh release create ${{ github.ref_name }} hyperc-linux-x86_64.tar.gz --generate-notes
+              env:
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
