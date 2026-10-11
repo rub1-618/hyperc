@@ -3,6 +3,7 @@ use crate::ast::{Expr, Stmt, LiteralValue, VarType};
 use crate::error::HypercError;
 use crate::support::{expr_span, stmt_span, is_comparison, mangle};
 use std::path::Path;
+use std::process::Stdio;
 use std::{
     path::PathBuf,
     process::Command,
@@ -29,6 +30,9 @@ use inkwell::{
         PointerValue, ValueKind
     }
 };
+
+const CLANG: &str       = "clang";
+const CLANG_VER: &str   = "clang-99";
 
 impl From<BuilderError> for HypercError {
     fn from(value: BuilderError) -> Self {
@@ -1119,7 +1123,8 @@ impl <'ctx>Codegen<'ctx> {
         .map_err(|e| HypercError::BuildError {
             message: e.to_string()
         })?;
-        let mut cmd = Command::new("clang");
+        let clang = self.get_clang()?;
+        let mut cmd = Command::new(clang);
         cmd.args([
             emit_path.to_str().unwrap(),
             "-o",
@@ -1176,6 +1181,42 @@ impl <'ctx>Codegen<'ctx> {
             Err(e) => Err(HypercError::BuildError {
                 message: e.to_string()
             })
+        }
+    }
+
+    fn get_clang(&self) -> Result<String, HypercError> {
+        let mut clang_22 = Command::new(CLANG_VER);
+        clang_22.arg("--version");
+        clang_22.stdout(Stdio::null());
+        match clang_22.status() {
+            Ok(status)   => {
+                if !status.success() {
+                    Err(HypercError::BuildError {
+                        message: format!("Clang check exited with code: {:?}", status.code())
+                    })
+                } else {
+                    Ok(CLANG_VER.to_string())
+                }
+            }
+            Err(_)  => {
+                let mut clang = Command::new(CLANG);
+                clang.arg("--version");
+                clang.stdout(Stdio::null());
+                match clang.status() {
+                    Ok(status)   => {
+                        if !status.success() {
+                            Err(HypercError::BuildError {
+                                message: format!("Clang check exited with code: {:?}", status.code())
+                            })
+                        } else {
+                            Ok(CLANG.to_string())
+                        }
+                    }
+                    Err(_)  => Err(HypercError::BuildError {
+                        message: "Clang not found.".to_string()
+                    })
+                }
+            }
         }
     }
 }
