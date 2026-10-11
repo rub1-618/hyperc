@@ -4,7 +4,7 @@ name: "Release on tag workflow."
 
 on: 
     push:
-      - branches: [main]
+      - branches: main
     pull_request: 
 
 env:
