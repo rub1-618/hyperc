@@ -1,0 +1,44 @@
+name: "Release on tag workflow."
+
+# permissions: write
+
+on: 
+    push:
+      - branches: [main]
+    pull_request: 
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+    build:
+
+        runs-on: ubuntu-latest
+        # env:
+        #   LLVM_SYS_221_PREFIX: /usr/lib/llvm22-1
+
+        steps:
+            - uses: actions/checkout@v4
+            
+            - name: Install LLVM
+              run: |
+                apt-get update
+                wget https://apt.llvm.org/llvm.sh
+                chmod +x ./llvm.sh
+                sudo ./llvm.sh 22
+
+                sudo apt-get install llvm-22-dev libpolly-22-dev clang-22
+            
+            - name: Check LLVM
+              run: ls /usr/lib | grep llvm
+
+            - name: Tests
+              run: cargo test --release
+
+            - name: Build
+              run: cargo build --release
+
+            # - name: Release
+            #   run: gh release create ${{ github.ref_name }} target/release/hyperc
+            #   env:
+            #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
