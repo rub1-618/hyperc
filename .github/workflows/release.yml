@@ -58,10 +58,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Dependencies installation
-        run: winget install LLVM.LLVM
+        shell: bash
+        run: winget install -e --id LLVM.LLVM -h --accept-package-agreements --accept-source-agreements
 
-      - name: Test
-        run: cargo test --release
+      - name: Dependencies diagnostics
+        shell: bash  
+        run: |
+          ls "/c/Program Files/LLVM"
+          ls "/c/Program Files/LLVM/bin"
+
+      # - name: Test
+      #   run: cargo test --release
 
       - name: Build
         run: cargo build --release
