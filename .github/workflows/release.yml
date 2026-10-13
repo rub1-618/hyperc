@@ -9,6 +9,9 @@ on:
 permissions:
   contents: write
 
+env:
+  LLVM_SYS_221_PREFIX
+
 jobs:
   
   build-linux-bin:
