@@ -54,7 +54,7 @@ jobs:
         run: docker build -t ghcr.io/rub1-618/hyperc:${{ github.ref_name }} .
 
       - name: Container test
-        run: docker run --rm ghrc.io/rub1-618/hyperc:${{ github.ref_name }} --version
+        run: docker run --rm ghcr.io/rub1-618/hyperc:${{ github.ref_name }} --version
 
       - name: Login to GHCR
         if: startsWith( github.ref, 'refs/tags/v' )
