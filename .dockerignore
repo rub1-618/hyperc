@@ -1,0 +1,13 @@
+.directory
+.gitignore
+
+target/
+
+README.md
+
+# testing files
+out
+out.ll
+out.o
+out.s
+test.hr

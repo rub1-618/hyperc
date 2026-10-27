@@ -9,8 +9,7 @@ on:
 permissions:
   contents: write
 
-env:
-  LLVM_SYS_221_PREFIX
+
 
 jobs:
   
@@ -53,25 +52,29 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
-  build-windows-bin:
+  # build-windows-bin:
 
-    runs-on: windows-latest
+  #   runs-on: windows-latest
 
-    steps:
-      - uses: actions/checkout@v4
+  #   env:
+  #     LLVM_SYS_221_PREFIX:
+  #       'C:\Program Files\LLVM'
 
-      - name: Dependencies installation
-        shell: bash
-        run: winget install -e --id LLVM.LLVM -h --accept-package-agreements --accept-source-agreements
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Dependencies diagnostics
-        shell: bash  
-        run: |
-          ls "/c/Program Files/LLVM"
-          ls "/c/Program Files/LLVM/bin"
+  #     - name: Dependencies installation
+  #       shell: bash
+  #       run: winget install -e --id LLVM.LLVM -h --accept-package-agreements --accept-source-agreements
 
-      # - name: Test
-      #   run: cargo test --release
+  #     - name: Dependencies diagnostics
+  #       shell: bash  
+  #       run: |
+  #         ls "/c/Program Files/LLVM"
+  #         ls "/c/Program Files/LLVM/bin"
 
-      - name: Build
-        run: cargo build --release
+  #     # - name: Test
+  #     #   run: cargo test --release
+
+  #     - name: Build
+  #       run: cargo build --release
