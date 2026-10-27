@@ -53,6 +53,9 @@ jobs:
         shell: bash
         run: docker build -t ghcr.io/rub1-618/hyperc:${{ github.ref_name }} .
 
+      - name: Container test
+        run: docker run --rm ghrc.io/rub1-618/hyperc:${{ github.ref_name }} --version
+
       - name: Login to GHCR
         if: startsWith( github.ref, 'refs/tags/v' )
         run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
