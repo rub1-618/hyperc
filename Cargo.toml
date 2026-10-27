@@ -2,6 +2,8 @@
 name = "hyperc"
 version = "0.3.5"
 edition = "2024"
+license = "MIT"
+authors = ["Alan Thompson"]
 
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
