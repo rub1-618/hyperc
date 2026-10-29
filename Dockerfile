@@ -32,4 +32,4 @@ RUN cargo test --release
 
 RUN cargo build --release
 
-ENTRYPOINT ["/work/target/release/hyperc"]
+ENTRYPOINT ["/usr/local/bin/hyperc"]
