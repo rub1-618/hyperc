@@ -29,7 +29,7 @@ EOF
 COPY . /work
 
 RUN cargo test --release
-
 RUN cargo build --release
 
+RUN install -D /work/target/release/hyperc /usr/local/bin/hyperc
 ENTRYPOINT ["/usr/local/bin/hyperc"]
