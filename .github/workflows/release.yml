@@ -69,6 +69,6 @@ jobs:
 
       - name: Release
         if: startsWith( github.ref, 'refs/tags/v' )
-        run: gh release create ${{ github.ref_name }} hyperc-linux-x86_64.tar.gz --generate-notes
+        run: gh release upload ${{ github.ref_name }} hyperc-linux-x86_64.tar.gz --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
