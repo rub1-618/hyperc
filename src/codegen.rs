@@ -45,7 +45,7 @@ impl From<BuilderError> for HypercError {
 
 pub struct Codegen<'ctx> {
     context: &'ctx Context,
-    module: Module<'ctx>,
+    pub module: Module<'ctx>,
     builder: Builder<'ctx>,
     variables: HashMap<String, 
         (PointerValue<'ctx>, BasicTypeEnum<'ctx>, VarType)>,
@@ -76,10 +76,8 @@ impl <'ctx>Codegen<'ctx> {
     }
 
     pub fn compile(&mut self, 
-        stmts: &[Stmt], path: &str, 
-        out: &str, show_ir: bool,
-        emit: Emit
-    ) -> Result<PathBuf, HypercError> {
+        stmts: &[Stmt], show_ir: bool
+    ) -> Result<TargetMachine, HypercError> {
 
         self.initialize_native()?;
         let target_machine = self.get_target_machine()?;
@@ -103,8 +101,7 @@ impl <'ctx>Codegen<'ctx> {
                 })
             }
         }
-        let bin_path = self.emit(target_machine, path, out, emit)?;
-        Ok(bin_path)
+        Ok(target_machine)
     }
 
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), HypercError> {
@@ -1083,7 +1080,10 @@ impl <'ctx>Codegen<'ctx> {
         }
     }
 
-    fn emit(&self, target_machine: TargetMachine, path: &str, out: &str, emit_to: Emit) -> Result<PathBuf, HypercError> {
+    pub fn emit(&self,
+        target_machine: TargetMachine, path: &str,
+        out: &str, emit_to: Emit
+    ) -> Result<PathBuf, HypercError> {
 
         let out_path = Path::new(path).parent().unwrap_or(Path::new("."));
 

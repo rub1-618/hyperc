@@ -11,6 +11,7 @@ use crate::resolver;
 use crate::checker;
 use crate::codegen;
 use crate::error;
+use crate::jit;
 
 pub enum StageKind {
     Lexer,
@@ -138,8 +139,20 @@ pub fn generate_code(
 
     let context = inkwell::context::Context::create();
     let mut codegen = codegen::Codegen::new(&context);
-    let bin_path = match codegen.compile(&stmts, path, out, show_ir, emit) {
-        Ok(p) => p,
+
+    match codegen.compile(&stmts, show_ir) {
+        Ok(tm) => {
+
+            let bin_path = match codegen
+                .emit(tm, path, out, emit) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        error::report_single_error(&e);
+                        std::process::exit(error::exit_code(&e));
+                    }
+            };
+            return bin_path;
+        },
         Err(e) => {
             match e {
                 error::HypercError::CompileError { .. } => {
@@ -157,5 +170,42 @@ pub fn generate_code(
             }
         }
     };
-    bin_path
+}
+
+pub fn generate_jit(
+    src: &str, stmts: &Vec<ast::Stmt>, 
+    show_ir: bool, is_color: bool
+) -> i32 {
+
+    let context = inkwell::context::Context::create();
+    let mut codegen = codegen::Codegen::new(&context);
+
+    match codegen.compile(&stmts, show_ir) {
+        Ok(_) => {
+            match jit::run_jit(&codegen.module) {
+                Ok(c) => return c,
+
+                Err(e) => {
+                    error::report_single_error(&e);
+                    std::process::exit(error::exit_code(&e));
+                }
+            }
+        },
+        Err(e) => {
+            match e {
+                error::HypercError::CompileError { .. } => {
+                    error::report_compiler_error(src, &e, is_color);
+                    std::process::exit(error::exit_code(&e));
+                }
+
+                error::HypercError::BuildError { .. } => {
+                    error::report_single_error(&e);
+                    std::process::exit(error::exit_code(&e));
+                }
+
+                _ => unreachable!() // bcs only Compile- and
+                // Build- Errors are handled in codegen.rs
+            }
+        }
+    };
 }

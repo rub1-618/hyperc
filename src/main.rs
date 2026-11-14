@@ -1,5 +1,5 @@
 use crate::{
-    codegen::Emit, drivers::{StageKind, log_stage}, error::{ColorMode, exit_code, report_single_error}
+    codegen::Emit, drivers::{StageKind, get_path_str, log_stage}, error::{ColorMode, exit_code, report_single_error}
 };
 use clap::{Parser, Subcommand};
 use std::{path::PathBuf, time::Instant};
@@ -15,6 +15,7 @@ mod codegen;
 mod support;
 mod drivers;
 mod setup;
+mod jit;
 
 const RUN_EMIT: Emit = Emit::Obj;
 
@@ -28,10 +29,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
 
-    /// Sets up the compiler and installs llvm.
+    /// sets up the compiler and installs llvm.
     Setup,
 
-    /// Runs the file specified.
+    /// runs the file specified.
     Run   {
         path: PathBuf,
         /// lets you select the directory for the binary file.
@@ -47,11 +48,14 @@ enum Commands {
         /// displays the generated intermediate representation.
         #[arg(long)] show_ir: bool,
 
-        /// sets the color stderr mode ( auto / always / never ).
+        /// sets the color stderr mode.
         #[arg(long, value_enum, default_value_t = ColorMode::Auto)] color: ColorMode,
 
         /// gives a more detailed information about the compilers work.
-        #[arg(long, short)] verbose: bool
+        #[arg(long, short)] verbose: bool,
+
+        /// runs your code in a just-in-time mode.
+        #[arg(long, short, conflicts_with = "out")] jit: bool
     },
 
     /// builds the file specified.
@@ -108,10 +112,10 @@ fn main() {
             path, out, 
             show_tokens, show_ast, 
             show_ir, color, 
-            verbose 
+            verbose, jit
         } => {
             let before = Instant::now();
-            let code = run(&path, &out, show_tokens, show_ast, show_ir, color, verbose);
+            let code = run(&path, &out, show_tokens, show_ast, show_ir, color, verbose, jit);
             log_stage(StageKind::All, before, verbose);
             std::process::exit(code);
         }
@@ -133,6 +137,7 @@ fn main() {
             log_stage(StageKind::Compiling, before, verbose);
 
             if emit != Emit::Ll {
+                // unwrap() because can't be --jit
                 eprintln!("Compiled to: {}\n", &bin_path.display());
             }
                 
@@ -183,8 +188,17 @@ fn run (
     path: &PathBuf, out: &Option<PathBuf>, 
     show_tokens: bool, show_ast: bool, 
     show_ir: bool, colormode: ColorMode, 
-    verbose: bool
+    verbose: bool, jit: bool
 ) -> i32 {
+
+    if jit {
+        return run_with_jit(
+            path, show_tokens,
+            show_ast, show_ir,
+            colormode, verbose
+        );
+    }
+
     let before = Instant::now();
     let bin_path = build(
         path, out, 
@@ -193,9 +207,9 @@ fn run (
         RUN_EMIT, verbose
     );
     log_stage(StageKind::Compiling, before, verbose);
+    let before = Instant::now();
 
     // Emit::Obj because it's the only option for run
-    let before = Instant::now();
     let code = drivers::run_bin(&bin_path);
     match code {
         Ok(opt) => {
@@ -218,6 +232,36 @@ fn run (
             error::exit_code(&error)
         }
     }
+}
+
+fn run_with_jit(
+    path: &PathBuf, show_tokens: bool,
+    show_ast: bool, show_ir: bool,
+    colormode: ColorMode, verbose: bool
+) -> i32 {
+
+    let before = Instant::now();
+
+    let  is_color = error::is_color(colormode);
+     
+    match get_path_str(&path) {
+        Ok(_) => {},
+        Err(e) => {
+            error::report_single_error(&e);
+            std::process::exit(error::exit_code(&e));
+        }
+    }
+
+    let (stmts, src) = check(
+        &path, show_tokens, 
+        show_ast, is_color, verbose
+    );
+
+    let code = drivers::generate_jit(
+        &src, &stmts, show_ir, is_color
+    );
+    log_stage(StageKind::Run, before, verbose);
+    code
 }
 
 fn check(path: &PathBuf, show_tokens: bool, show_ast: bool, is_color: bool, verbose: bool

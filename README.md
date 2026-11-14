@@ -113,6 +113,7 @@ Depending on the command, hyperc supports options such as:
 | `--color` | Configure colored output: `auto`, `always`, or `never` |
 | `-v`, `--verbose` | Enable verbose output |
 | `--emit` | Select the output format for `build`; defaults to `obj` |
+| `-j`, `--jit` | Runs your code in a just-in-time mode. |
 
 Use the command-specific help output to see which options are available for each command.
 
